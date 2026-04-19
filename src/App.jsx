@@ -29,6 +29,7 @@ async function fetchCsv(url) {
 const URL_VENDAS     = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRkhaBtnf2pTwGdZh8VroPSlvAjgfikS2pzrswllPTBJuYQrrB8PEJXKRUvqdzl7oLsU37gMGTEd-qC/pub?output=csv";
 const URL_ESTOQUE    = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRf8q8phpvkyqstNVcnwL-kpT890VivYhVTIf7zbMsncHk5dcp-_DHGFjzD_5usua-CzsEfRPyPnnn7/pub?output=csv";
 const URL_CALENDARIO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSDxyW-yoO1Y9YngZEL5L4uAKx8Vd9A18Y7oF7OdqvjIUJBGdnuakVX6FJz63m1kb2TnkpFyuGNAuVz/pub?output=csv";
+const URL_PROCESSOS  = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSLRDqgcYE4QpXZ3WeGzr5nDeeEVvIDPOVmTdshA0lZEGZA9m3PZSVRBZh30_sROKFJFd4Ll3l-Ar_v/pub?output=csv";
 
 function parseVendas(text) {
   const rows = parseCsv(text);
@@ -39,7 +40,7 @@ function parseVendas(text) {
     if (!r[1] || r[1].match(/^\d+$/) || !r[3]) continue;
     const valor = parseFloat(String(r[3]).replace(/[^0-9,]/g, "").replace(",", ".")) || 0;
     if (valor === 0) continue;
-    data.push({ cliente: r[1], servico: r[2] || "Servico", valor });
+    data.push({ vendedor: r[0] || "", cliente: r[1], servico: r[2] || "Servico", valor });
     total += valor;
   }
   const tipoMap = {};
@@ -66,10 +67,7 @@ function parseEstoque(text) {
   for (let i = 2; i < rows.length; i++) {
     const r = rows[i];
     if (!r[iItem]) continue;
-    result.push({
-      item: r[iItem], categoria: r[iCat] || "", qtd: r[iQtd] || "0",
-      valorUnit: r[iVU] || "0", valorTotal: r[iVT] || "0", proxCompra: r[iProx] || "",
-    });
+    result.push({ item: r[iItem], categoria: r[iCat]||"", qtd: r[iQtd]||"0", valorUnit: r[iVU]||"0", valorTotal: r[iVT]||"0", proxCompra: r[iProx]||"" });
   }
   return result;
 }
@@ -83,34 +81,24 @@ function parseCalendario(text) {
     const [d, m, a] = r[0].split("/");
     if (!d || !m || !a) continue;
     result.push({
-      data: r[0], nome: r[1], tipo: r[2] || "Outro",
-      pais: r[3] || "Brasil", natureza: r[4] || "",
+      data: r[0], nome: r[1], tipo: r[2]||"Outro", pais: r[3]||"Brasil",
       dateObj: new Date(`${a}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`),
-      dia: parseInt(d), mes: parseInt(m) - 1, ano: parseInt(a),
+      dia: parseInt(d), mes: parseInt(m)-1, ano: parseInt(a),
     });
   }
   return result;
 }
 
-const TIPO_CONFIG = {
-  "Aniversario":             { emoji: "birthday", bg: "bg-pink-100",   text: "text-pink-700",   dot: "bg-pink-400"   },
-  "Feriado / Data Especial": { emoji: "party",    bg: "bg-yellow-100", text: "text-yellow-700", dot: "bg-yellow-400" },
-  "Evento Cultural":         { emoji: "theater",  bg: "bg-purple-100", text: "text-purple-700", dot: "bg-purple-400" },
-  "Outro":                   { emoji: "pin",      bg: "bg-gray-100",   text: "text-gray-600",   dot: "bg-gray-400"   },
-};
-
-const TIPO_EMOJI = {
-  "Aniversario": "birthday_cake",
-  "Feriado / Data Especial": "tada",
-  "Evento Cultural": "performing_arts",
-  "Outro": "pushpin",
-};
-
-const PAIS_FLAG = { "Brasil": "flag_brazil", "Italia": "flag_italy", "Ambos": "earth_globe" };
-
-function getTipoConfig(tipo) {
-  if (tipo && tipo.includes("Aniversario")) return TIPO_CONFIG["Aniversario"];
-  return TIPO_CONFIG[tipo] || TIPO_CONFIG["Outro"];
+function parseProcessos(text) {
+  const rows = parseCsv(text);
+  const result = [];
+  for (let i = 3; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r[0] || r[0].includes("VELLOSO") || r[0].includes("Nr") || r[0].includes("N")) continue;
+    if (r.every(c => !c)) continue;
+    result.push({ pasta: r[0]||"", familia: r[1]||"", tipo: r[2]||"", vendedor: r[3]||"", responsavel: r[4]||"", etapa: r[5]||"", prazo: r[6]||"", totalContrato: r[7]||"0" });
+  }
+  return result.filter(p => p.pasta && p.familia);
 }
 
 function getTipoEmoji(tipo) {
@@ -128,103 +116,274 @@ function getPaisFlag(pais) {
   return "🌍";
 }
 
-function Card({ title, value, sub, gradient, emoji }) {
+const ETAPA_CORES = {
+  "Concluido": "bg-green-100 text-green-800",
+  "Concluído": "bg-green-100 text-green-800",
+  "Em andamento": "bg-blue-100 text-blue-800",
+  "Pendente": "bg-yellow-100 text-yellow-800",
+  "Cancelado": "bg-red-100 text-red-800",
+};
+
+// ── TELA CALENDARIO ───────────────────────────────────────────────────────────
+function TelaCalendario({ eventos }) {
+  const hoje = new Date();
+  const [mesSel, setMesSel] = useState(hoje.getMonth());
+  const [anoSel, setAnoSel] = useState(hoje.getFullYear());
+  const [diaSel, setDiaSel] = useState(null);
+  const [filtroTipo, setFiltroTipo] = useState("Todos");
+  const [filtroPais, setFiltroPais] = useState("Todos");
+
+  const meses = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+  const diasSemana = ["SEG","TER","QUA","QUI","SEX","SÁB","DOM"];
+
+  const eventosMes = useMemo(() => eventos.filter(e =>
+    e.mes === mesSel && e.ano === anoSel &&
+    (filtroTipo === "Todos" || e.tipo === filtroTipo) &&
+    (filtroPais === "Todos" || e.pais === filtroPais || e.pais === "Ambos")
+  ), [eventos, mesSel, anoSel, filtroTipo, filtroPais]);
+
+  const eventosPorDia = {};
+  for (const e of eventosMes) {
+    if (!eventosPorDia[e.dia]) eventosPorDia[e.dia] = [];
+    eventosPorDia[e.dia].push(e);
+  }
+
+  const primeiroDiaSemana = new Date(anoSel, mesSel, 1).getDay();
+  const offset = primeiroDiaSemana === 0 ? 6 : primeiroDiaSemana - 1;
+  const diasNoMes = new Date(anoSel, mesSel + 1, 0).getDate();
+  const eventosDia = diaSel ? (eventosPorDia[diaSel] || []) : [];
+
   return (
-    <div className={`rounded-2xl p-5 text-white shadow-lg ${gradient} relative overflow-hidden`}>
-      <div className="absolute right-4 top-3 text-4xl opacity-20 select-none">{emoji}</div>
-      <p className="text-xs font-semibold uppercase tracking-widest opacity-75">{title}</p>
-      <p className="text-3xl font-extrabold mt-1 leading-tight">{value}</p>
-      {sub && <p className="text-xs mt-1 opacity-70">{sub}</p>}
-    </div>
-  );
-}
-
-function SectionTitle({ children }) {
-  return <h2 className="text-base font-bold text-gray-700 mb-4">{children}</h2>;
-}
-
-function TabDashboard({ vendas, estoque }) {
-  const mix = vendas?.mix || {};
-  const mixTotal = Object.values(mix).reduce((a, b) => a + b, 0);
-  const coresBarra = ["from-blue-500 to-blue-600","from-green-500 to-green-600","from-purple-500 to-purple-600","from-yellow-500 to-yellow-600","from-red-500 to-red-600"];
-
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card emoji="💰" title="Vendas do Mes" value={brl(vendas?.total || 0)} sub={`${vendas?.vendas?.length || 0} contratos`} gradient="bg-gradient-to-br from-blue-500 to-indigo-600" />
-        <Card emoji="📦" title="Itens em Estoque" value={estoque.length} sub="produtos cadastrados" gradient="bg-gradient-to-br from-emerald-500 to-green-600" />
-        <Card emoji="🛎️" title="Tipos de Servico" value={Object.keys(mix).length} sub="no mes atual" gradient="bg-gradient-to-br from-violet-500 to-purple-700" />
-        <Card emoji="🏆" title="Ticket Medio" value={brl(vendas?.vendas?.length ? (vendas.total / vendas.vendas.length) : 0)} sub="por contrato" gradient="bg-gradient-to-br from-orange-500 to-red-500" />
+    <div>
+      <div className="flex flex-wrap gap-3 justify-center mb-8">
+        {[["Todos","Todos"],["Aniversário","🎂 Aniversários"],["Feriado / Data Especial","🎉 Feriados"],["Evento Cultural","🎭 Culturais"]].map(([v,l]) => (
+          <button key={v} onClick={() => setFiltroTipo(v)}
+            className={`px-4 py-2 rounded-full text-sm font-semibold border-2 transition-all ${filtroTipo===v ? "bg-[#5c1e3c] text-white border-[#5c1e3c]" : "bg-white text-[#5c1e3c] border-[#5c1e3c] hover:bg-[#f5ede8]"}`}>
+            {l}
+          </button>
+        ))}
+        {["Todos","Brasil","Itália"].map(p => (
+          <button key={p} onClick={() => setFiltroPais(p)}
+            className={`px-4 py-2 rounded-full text-sm font-semibold border-2 transition-all ${filtroPais===p ? "bg-[#b5895a] text-white border-[#b5895a]" : "bg-white text-[#b5895a] border-[#b5895a] hover:bg-[#f5ede8]"}`}>
+            {getPaisFlag(p)} {p}
+          </button>
+        ))}
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-          <SectionTitle>💼 Contratos do Mes</SectionTitle>
-          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-            {(vendas?.vendas || []).map((v, i) => (
-              <div key={i} className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 hover:bg-blue-50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                    {v.cliente.charAt(0)}
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-800 text-sm leading-tight">{v.cliente}</p>
-                    <p className="text-xs text-gray-400">{v.servico}</p>
-                  </div>
-                </div>
-                <p className="font-bold text-emerald-600 text-sm">{brl(v.valor)}</p>
-              </div>
-            ))}
-            {!vendas && <p className="text-gray-400 text-sm text-center py-8">Carregando...</p>}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm p-6">
+          <div className="flex items-center justify-between mb-6">
+            <button onClick={() => { const d = new Date(anoSel, mesSel-1); setMesSel(d.getMonth()); setAnoSel(d.getFullYear()); setDiaSel(null); }}
+              className="w-9 h-9 rounded-full hover:bg-[#f5ede8] flex items-center justify-center text-[#5c1e3c] text-xl font-bold transition">&#8249;</button>
+            <h2 className="text-xl font-bold text-[#5c1e3c]">{meses[mesSel]}</h2>
+            <button onClick={() => { const d = new Date(anoSel, mesSel+1); setMesSel(d.getMonth()); setAnoSel(d.getFullYear()); setDiaSel(null); }}
+              className="w-9 h-9 rounded-full hover:bg-[#f5ede8] flex items-center justify-center text-[#5c1e3c] text-xl font-bold transition">&#8250;</button>
           </div>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-          <SectionTitle>📊 Mix de Servicos</SectionTitle>
-          <div className="space-y-4">
-            {Object.entries(mix).map(([tipo, val], i) => {
-              const pct = mixTotal > 0 ? Math.round((val / mixTotal) * 100) : 0;
+          <div className="grid grid-cols-7 mb-3">
+            {diasSemana.map(d => <div key={d} className="text-center text-xs font-bold text-gray-400 py-1">{d}</div>)}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {Array.from({length: offset}).map((_,i) => <div key={`o${i}`} />)}
+            {Array.from({length: diasNoMes}).map((_,i) => {
+              const dia = i+1;
+              const evts = eventosPorDia[dia] || [];
+              const isHoje = dia===hoje.getDate() && mesSel===hoje.getMonth() && anoSel===hoje.getFullYear();
+              const isSel = dia===diaSel;
+              const temAniv = evts.some(e => e.tipo.includes("Aniversário") || e.tipo.includes("Aniversario"));
+              const temFeriado = evts.some(e => e.tipo.includes("Feriado"));
               return (
-                <div key={tipo}>
-                  <div className="flex justify-between text-sm mb-1.5">
-                    <span className="font-semibold text-gray-700">{tipo}</span>
-                    <span className="text-gray-400 text-xs">{pct}% · {brl(val)}</span>
-                  </div>
-                  <div className="w-full bg-gray-100 rounded-full h-2.5">
-                    <div className={`bg-gradient-to-r ${coresBarra[i % coresBarra.length]} h-2.5 rounded-full transition-all duration-700`} style={{ width: `${pct}%` }} />
+                <div key={dia} onClick={() => setDiaSel(dia===diaSel ? null : dia)}
+                  className={`aspect-square flex flex-col items-center justify-start pt-1.5 rounded-xl cursor-pointer transition-all
+                    ${isSel ? "bg-[#5c1e3c] text-white" : isHoje ? "bg-[#f5ede8] text-[#5c1e3c]" : "hover:bg-[#fdf8f5] text-gray-700"}
+                  `}>
+                  <span className={`text-sm font-bold ${isSel ? "text-white" : isHoje ? "text-[#5c1e3c]" : ""}`}>{dia}</span>
+                  <div className="flex gap-0.5 mt-0.5 flex-wrap justify-center">
+                    {temAniv && <div className={`w-1.5 h-1.5 rounded-full ${isSel ? "bg-pink-300" : "bg-pink-400"}`} />}
+                    {temFeriado && <div className={`w-1.5 h-1.5 rounded-full ${isSel ? "bg-yellow-200" : "bg-yellow-400"}`} />}
+                    {evts.length > 0 && !temAniv && !temFeriado && <div className={`w-1.5 h-1.5 rounded-full ${isSel ? "bg-purple-300" : "bg-purple-400"}`} />}
                   </div>
                 </div>
               );
             })}
           </div>
-          {mixTotal > 0 && (
-            <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between text-sm">
-              <span className="text-gray-500 font-medium">Total do mes</span>
-              <span className="font-bold text-gray-800">{brl(mixTotal)}</span>
-            </div>
+          <div className="mt-4 pt-4 border-t border-gray-100 flex gap-4 flex-wrap text-xs text-gray-400">
+            <span><span className="inline-block w-2 h-2 rounded-full bg-pink-400 mr-1"></span>Aniversários</span>
+            <span><span className="inline-block w-2 h-2 rounded-full bg-yellow-400 mr-1"></span>Feriados</span>
+            <span><span className="inline-block w-2 h-2 rounded-full bg-purple-400 mr-1"></span>Culturais</span>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm p-6">
+          {diaSel ? (
+            <>
+              <h3 className="text-lg font-bold text-[#5c1e3c] mb-1">{diaSel} de {meses[mesSel]}</h3>
+              <div className="w-12 h-0.5 bg-[#b5895a] mb-4" />
+              {eventosDia.length === 0 ? (
+                <p className="text-gray-400 text-sm">Nenhum evento neste dia.</p>
+              ) : (
+                <div className="space-y-3">
+                  {eventosDia.map((e, i) => (
+                    <div key={i} className="border-l-2 border-[#b5895a] pl-3">
+                      <p className="text-sm font-semibold text-gray-800">{getTipoEmoji(e.tipo)} {e.nome.replace("Aniversário: ","")}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{e.tipo} · {getPaisFlag(e.pais)} {e.pais}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <h3 className="text-lg font-bold text-[#5c1e3c] mb-1">Selecione um dia</h3>
+              <div className="w-12 h-0.5 bg-[#b5895a] mb-4" />
+              <p className="text-sm text-gray-400">Clique em um dia do calendário para ver os eventos</p>
+              <div className="mt-6 space-y-2">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Próximos eventos</p>
+                {eventos.filter(e => {
+                  const diff = Math.ceil((e.dateObj - new Date()) / 86400000);
+                  return diff >= 0 && diff <= 14;
+                }).sort((a,b) => a.dateObj-b.dateObj).slice(0,5).map((e,i) => {
+                  const diff = Math.ceil((e.dateObj - new Date()) / 86400000);
+                  return (
+                    <div key={i} className="flex items-center gap-2 py-1.5 border-b border-gray-50">
+                      <span className="text-lg">{getTipoEmoji(e.tipo)}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-gray-700 truncate">{e.nome.replace("Aniversário: ","")}</p>
+                        <p className="text-xs text-gray-400">{e.data}</p>
+                      </div>
+                      <span className={`text-xs font-bold flex-shrink-0 ${diff===0?"text-red-500":diff<=3?"text-orange-500":"text-gray-400"}`}>
+                        {diff===0?"Hoje":`${diff}d`}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
       </div>
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-        <SectionTitle>📦 Controle de Estoque</SectionTitle>
+    </div>
+  );
+}
+
+// ── TELA VENDAS ───────────────────────────────────────────────────────────────
+function TelaVendas({ vendas }) {
+  const mix = vendas?.mix || {};
+  const mixTotal = Object.values(mix).reduce((a,b)=>a+b,0);
+  const cores = ["bg-[#5c1e3c]","bg-[#b5895a]","bg-[#8b4f72]","bg-[#c9a87c]","bg-[#3d1429]"];
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="bg-white rounded-2xl p-5 shadow-sm border-l-4 border-[#5c1e3c]">
+          <p className="text-xs text-gray-400 uppercase font-semibold tracking-wider">Total do Mês</p>
+          <p className="text-2xl font-bold text-[#5c1e3c] mt-1">{brl(vendas?.total||0)}</p>
+        </div>
+        <div className="bg-white rounded-2xl p-5 shadow-sm border-l-4 border-[#b5895a]">
+          <p className="text-xs text-gray-400 uppercase font-semibold tracking-wider">Contratos</p>
+          <p className="text-2xl font-bold text-[#b5895a] mt-1">{vendas?.vendas?.length||0}</p>
+        </div>
+        <div className="bg-white rounded-2xl p-5 shadow-sm border-l-4 border-[#8b4f72]">
+          <p className="text-xs text-gray-400 uppercase font-semibold tracking-wider">Ticket Médio</p>
+          <p className="text-2xl font-bold text-[#8b4f72] mt-1">{brl(vendas?.vendas?.length?(vendas.total/vendas.vendas.length):0)}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-2xl shadow-sm p-6">
+          <h3 className="font-bold text-[#5c1e3c] text-base mb-1">Contratos do Mês</h3>
+          <div className="w-8 h-0.5 bg-[#b5895a] mb-4" />
+          <div className="space-y-3 max-h-80 overflow-y-auto">
+            {(vendas?.vendas||[]).map((v,i) => (
+              <div key={i} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
+                <div className="w-9 h-9 rounded-full bg-[#f5ede8] flex items-center justify-center text-[#5c1e3c] font-bold text-sm flex-shrink-0">
+                  {v.cliente.charAt(0).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-800 text-sm truncate">{v.cliente}</p>
+                  <p className="text-xs text-gray-400 truncate">{v.servico}</p>
+                </div>
+                <p className="font-bold text-[#5c1e3c] text-sm flex-shrink-0">{brl(v.valor)}</p>
+              </div>
+            ))}
+            {!vendas && <p className="text-gray-400 text-center py-8">Carregando...</p>}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm p-6">
+          <h3 className="font-bold text-[#5c1e3c] text-base mb-1">Mix de Serviços</h3>
+          <div className="w-8 h-0.5 bg-[#b5895a] mb-4" />
+          <div className="space-y-4">
+            {Object.entries(mix).map(([tipo,val],i) => {
+              const pct = mixTotal>0?Math.round((val/mixTotal)*100):0;
+              return (
+                <div key={tipo}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="font-medium text-gray-700">{tipo}</span>
+                    <span className="text-gray-400 text-xs">{pct}% · {brl(val)}</span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-2">
+                    <div className={`${cores[i%cores.length]} h-2 rounded-full transition-all duration-700`} style={{width:`${pct}%`}} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {mixTotal>0 && <div className="mt-4 pt-3 border-t border-gray-100 flex justify-between"><span className="text-sm text-gray-500">Total</span><span className="font-bold text-[#5c1e3c]">{brl(mixTotal)}</span></div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── TELA PROCESSOS ────────────────────────────────────────────────────────────
+function TelaProcessos({ processos }) {
+  const [busca, setBusca] = useState("");
+  const filtrados = processos.filter(p =>
+    p.familia.toLowerCase().includes(busca.toLowerCase()) ||
+    p.tipo.toLowerCase().includes(busca.toLowerCase()) ||
+    p.etapa.toLowerCase().includes(busca.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-2xl shadow-sm p-4">
+        <input value={busca} onChange={e=>setBusca(e.target.value)}
+          placeholder="Buscar por família, tipo ou etapa..."
+          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#5c1e3c] transition" />
+      </div>
+      <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div className="p-5 border-b border-gray-100 flex justify-between items-center">
+          <div>
+            <h3 className="font-bold text-[#5c1e3c]">Controle de Processos</h3>
+            <div className="w-8 h-0.5 bg-[#b5895a] mt-1" />
+          </div>
+          <span className="text-sm text-gray-400">{filtrados.length} processos</span>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left border-b border-gray-100">
-                {["Item","Categoria","Qtd","Valor Unit.","Total","Prox. Compra"].map(h => (
-                  <th key={h} className="pb-3 text-xs text-gray-400 uppercase tracking-wider font-semibold">{h}</th>
+            <thead className="bg-[#fdf8f5]">
+              <tr>
+                {["Pasta","Família","Tipo","Vendedor","Etapa","Prazo"].map(h => (
+                  <th key={h} className="text-left px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {estoque.map((e, i) => (
-                <tr key={i} className="hover:bg-gray-50 transition-colors">
-                  <td className="py-3 font-semibold text-gray-800">{e.item}</td>
-                  <td className="py-3"><span className="bg-emerald-100 text-emerald-700 text-xs font-semibold px-2 py-0.5 rounded-full">{e.categoria}</span></td>
-                  <td className="py-3 font-bold text-gray-700">{e.qtd}</td>
-                  <td className="py-3 text-gray-500">{brl(e.valorUnit)}</td>
-                  <td className="py-3 font-bold text-gray-800">{brl(e.valorTotal)}</td>
-                  <td className="py-3 text-xs text-gray-400">{e.proxCompra}</td>
+              {filtrados.slice(0,50).map((p,i) => (
+                <tr key={i} className="hover:bg-[#fdf8f5] transition-colors">
+                  <td className="px-4 py-3 font-mono text-xs text-gray-500">{p.pasta}</td>
+                  <td className="px-4 py-3 font-semibold text-gray-800">{p.familia}</td>
+                  <td className="px-4 py-3 text-gray-600">{p.tipo}</td>
+                  <td className="px-4 py-3 text-gray-600">{p.vendedor}</td>
+                  <td className="px-4 py-3">
+                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${ETAPA_CORES[p.etapa]||"bg-gray-100 text-gray-600"}`}>
+                      {p.etapa||"—"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{p.prazo||"—"}</td>
                 </tr>
               ))}
+              {filtrados.length===0 && <tr><td colSpan={6} className="text-center text-gray-400 py-10">Nenhum processo encontrado.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -233,148 +392,123 @@ function TabDashboard({ vendas, estoque }) {
   );
 }
 
-function TabCalendario({ eventos }) {
-  const hoje = new Date();
-  const [mesSel, setMesSel] = useState(hoje.getMonth());
-  const [anoSel, setAnoSel] = useState(hoje.getFullYear());
-  const [filtroTipo, setFiltroTipo] = useState("Todos");
-  const [filtroPais, setFiltroPais] = useState("Todos");
-  const meses = ["Janeiro","Fevereiro","Marco","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-  const eventosMes = useMemo(() => eventos.filter(e => e.mes === mesSel && e.ano === anoSel && (filtroTipo === "Todos" || e.tipo === filtroTipo) && (filtroPais === "Todos" || e.pais === filtroPais || e.pais === "Ambos")), [eventos, mesSel, anoSel, filtroTipo, filtroPais]);
-  const primeiroDia = new Date(anoSel, mesSel, 1).getDay();
-  const diasNoMes = new Date(anoSel, mesSel + 1, 0).getDate();
-  const eventosPorDia = {};
-  for (const e of eventosMes) { if (!eventosPorDia[e.dia]) eventosPorDia[e.dia] = []; eventosPorDia[e.dia].push(e); }
-  const proximos = useMemo(() => eventos.filter(e => { const diff = Math.ceil((e.dateObj - hoje) / 86400000); return diff >= 0 && diff <= 60 && (filtroTipo === "Todos" || e.tipo === filtroTipo) && (filtroPais === "Todos" || e.pais === filtroPais || e.pais === "Ambos"); }).sort((a, b) => a.dateObj - b.dateObj).slice(0, 10), [eventos, filtroTipo, filtroPais]);
+// ── TELA ESTOQUE ──────────────────────────────────────────────────────────────
+function TelaEstoque({ estoque }) {
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-wrap gap-3 items-center">
-        <div className="flex items-center gap-2">
-          <button onClick={() => { const d = new Date(anoSel, mesSel - 1); setMesSel(d.getMonth()); setAnoSel(d.getFullYear()); }} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center font-bold text-gray-600">&#8249;</button>
-          <span className="font-bold text-gray-800 min-w-[140px] text-center">{meses[mesSel]} {anoSel}</span>
-          <button onClick={() => { const d = new Date(anoSel, mesSel + 1); setMesSel(d.getMonth()); setAnoSel(d.getFullYear()); }} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center font-bold text-gray-600">&#8250;</button>
-        </div>
-        <div className="flex gap-2 flex-wrap ml-auto">
-          {["Todos","Aniversário","Feriado / Data Especial","Evento Cultural"].map(t => (
-            <button key={t} onClick={() => setFiltroTipo(t)} className={`text-xs px-3 py-1.5 rounded-full font-semibold transition ${filtroTipo === t ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{getTipoEmoji(t)} {t.split(" ")[0]}</button>
-          ))}
-          {["Todos","Brasil","Itália"].map(p => (
-            <button key={p} onClick={() => setFiltroPais(p)} className={`text-xs px-3 py-1.5 rounded-full font-semibold transition ${filtroPais === p ? "bg-indigo-500 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{getPaisFlag(p)} {p}</button>
-          ))}
-        </div>
+    <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+      <div className="p-5 border-b border-gray-100">
+        <h3 className="font-bold text-[#5c1e3c]">Controle de Estoque</h3>
+        <div className="w-8 h-0.5 bg-[#b5895a] mt-1" />
       </div>
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-          <div className="grid grid-cols-7 mb-2">
-            {["Dom","Seg","Ter","Qua","Qui","Sex","Sab"].map(d => (
-              <div key={d} className="text-center text-xs font-bold text-gray-400 py-2">{d}</div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-[#fdf8f5]">
+            <tr>
+              {["Item","Categoria","Quantidade","Valor Unit.","Total","Próx. Compra"].map(h => (
+                <th key={h} className="text-left px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {estoque.map((e,i) => (
+              <tr key={i} className="hover:bg-[#fdf8f5] transition-colors">
+                <td className="px-4 py-3 font-semibold text-gray-800">{e.item}</td>
+                <td className="px-4 py-3"><span className="bg-[#f5ede8] text-[#5c1e3c] text-xs font-semibold px-2.5 py-1 rounded-full">{e.categoria}</span></td>
+                <td className="px-4 py-3 font-bold text-gray-700">{e.qtd}</td>
+                <td className="px-4 py-3 text-gray-500">{brl(e.valorUnit)}</td>
+                <td className="px-4 py-3 font-bold text-[#5c1e3c]">{brl(e.valorTotal)}</td>
+                <td className="px-4 py-3 text-xs text-gray-400">{e.proxCompra}</td>
+              </tr>
             ))}
-          </div>
-          <div className="grid grid-cols-7 gap-1">
-            {Array.from({ length: primeiroDia }).map((_, i) => <div key={`e${i}`} />)}
-            {Array.from({ length: diasNoMes }).map((_, i) => {
-              const dia = i + 1;
-              const evts = eventosPorDia[dia] || [];
-              const isHoje = dia === hoje.getDate() && mesSel === hoje.getMonth() && anoSel === hoje.getFullYear();
-              return (
-                <div key={dia} className={`min-h-[56px] rounded-xl p-1.5 border transition ${isHoje ? "border-blue-400 bg-blue-50" : "border-transparent hover:border-gray-200 hover:bg-gray-50"}`}>
-                  <p className={`text-xs font-bold mb-1 ${isHoje ? "text-blue-600" : "text-gray-600"}`}>{dia}</p>
-                  <div className="space-y-0.5">
-                    {evts.slice(0, 2).map((e, ei) => {
-                      const cfg = getTipoConfig(e.tipo);
-                      return <div key={ei} className={`${cfg.bg} ${cfg.text} text-xs rounded px-1 py-0.5 truncate`} title={e.nome}>{getTipoEmoji(e.tipo)} {e.nome.replace("Aniversário: ","").split(" ")[0]}</div>;
-                    })}
-                    {evts.length > 2 && <div className="text-xs text-gray-400 font-semibold">+{evts.length - 2}</div>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-          <SectionTitle>⏰ Proximos 60 dias</SectionTitle>
-          <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
-            {proximos.map((e, i) => {
-              const diff = Math.ceil((e.dateObj - hoje) / 86400000);
-              const cfg = getTipoConfig(e.tipo);
-              return (
-                <div key={i} className={`rounded-xl p-3 ${cfg.bg}`}>
-                  <div className="flex justify-between items-start gap-2">
-                    <p className={`text-sm font-semibold ${cfg.text} leading-tight`}>{getTipoEmoji(e.tipo)} {e.nome.replace("Aniversário: ","")}</p>
-                    <span className={`text-xs font-bold flex-shrink-0 ${diff === 0 ? "text-red-600" : diff <= 7 ? "text-orange-500" : cfg.text}`}>{diff === 0 ? "Hoje!" : `${diff}d`}</span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">{e.data} {getPaisFlag(e.pais)}</p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-        <SectionTitle>📋 Eventos de {meses[mesSel]} ({eventosMes.length})</SectionTitle>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-80 overflow-y-auto pr-1">
-          {eventosMes.map((e, i) => {
-            const cfg = getTipoConfig(e.tipo);
-            return (
-              <div key={i} className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3 hover:bg-gray-100 transition">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0 ${cfg.bg}`}>{getTipoEmoji(e.tipo)}</div>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-800 truncate">{e.nome.replace("Aniversário: ","")}</p>
-                  <p className="text-xs text-gray-400">{e.data} · {getPaisFlag(e.pais)} {e.pais}</p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+            {estoque.length===0 && <tr><td colSpan={6} className="text-center text-gray-400 py-10">Carregando...</td></tr>}
+          </tbody>
+        </table>
       </div>
     </div>
   );
 }
 
+// ── APP PRINCIPAL ─────────────────────────────────────────────────────────────
 export default function App() {
-  const [aba, setAba] = useState("dashboard");
+  const [aba, setAba] = useState("calendario");
   const [vendas, setVendas] = useState(null);
   const [estoque, setEstoque] = useState([]);
   const [eventos, setEventos] = useState([]);
+  const [processos, setProcessos] = useState([]);
   const [ultima, setUltima] = useState("");
 
   async function carregar() {
     try {
-      const [tv, te, tc] = await Promise.all([fetchCsv(URL_VENDAS), fetchCsv(URL_ESTOQUE), fetchCsv(URL_CALENDARIO)]);
+      const [tv, te, tc, tp] = await Promise.all([
+        fetchCsv(URL_VENDAS), fetchCsv(URL_ESTOQUE), fetchCsv(URL_CALENDARIO), fetchCsv(URL_PROCESSOS)
+      ]);
       setVendas(parseVendas(tv));
       setEstoque(parseEstoque(te));
       setEventos(parseCalendario(tc));
+      setProcessos(parseProcessos(tp));
       setUltima(new Date().toLocaleTimeString("pt-BR"));
-    } catch (e) { console.error(e); }
+    } catch(e) { console.error(e); }
   }
 
-  useEffect(() => { carregar(); const t = setInterval(carregar, 30000); return () => clearInterval(t); }, []);
+  useEffect(() => {
+    carregar();
+    const t = setInterval(carregar, 30000);
+    return () => clearInterval(t);
+  }, []);
+
+  const abas = [
+    { id:"calendario", label:"Calendário", emoji:"🗓️", cor:"bg-[#5c1e3c]" },
+    { id:"vendas",     label:"Vendas",     emoji:"📈", cor:"bg-[#b5895a]" },
+    { id:"processos",  label:"Processos",  emoji:"📋", cor:"bg-[#6b3a5d]" },
+    { id:"estoque",    label:"Estoque",    emoji:"📦", cor:"bg-[#c0392b]" },
+  ];
+
+  const titulos = {
+    calendario: "Calendário de Eventos",
+    vendas: "Equipe Comercial",
+    processos: "Controle de Processos",
+    estoque: "Controle de Estoque",
+  };
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <header className="bg-gradient-to-r from-blue-700 to-indigo-800 shadow-lg">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-xl">🏛️</div>
-            <div>
-              <h1 className="text-white font-extrabold text-lg leading-tight">Velloso Cidadania</h1>
-              <p className="text-blue-200 text-xs">Sistema de Gestao 2026</p>
-            </div>
-          </div>
-          <p className="text-blue-200 text-xs hidden sm:block">{ultima || "Carregando..."}</p>
+    <div className="min-h-screen" style={{backgroundColor:"#f7f3ef"}}>
+      {/* Header */}
+      <header className="pt-10 pb-6 text-center">
+        <div className="flex justify-center mb-3">
+          <div className="w-14 h-14 rounded-full border-2 border-[#5c1e3c] flex items-center justify-center text-2xl bg-white shadow-sm">🌍</div>
         </div>
-        <div className="max-w-7xl mx-auto px-6 flex gap-1">
-          {[["dashboard","📊 Dashboard"],["calendario","📅 Calendario"]].map(([id, label]) => (
-            <button key={id} onClick={() => setAba(id)} className={`px-5 py-2.5 text-sm font-semibold rounded-t-xl transition ${aba === id ? "bg-slate-100 text-blue-700" : "text-blue-200 hover:text-white hover:bg-white/10"}`}>{label}</button>
+        <h1 className="text-4xl font-black tracking-widest text-[#5c1e3c] uppercase">VELLOSO</h1>
+        <p className="text-xs font-bold tracking-[0.4em] text-[#b5895a] uppercase mt-1">CIDADANIA</p>
+        <h2 className="text-xl font-semibold text-[#5c1e3c] mt-4">{titulos[aba]}</h2>
+        <p className="text-sm text-[#b5895a] mt-0.5">2026</p>
+
+        {/* Navbar */}
+        <nav className="flex flex-wrap justify-center gap-3 mt-6">
+          {abas.map(a => (
+            <button key={a.id} onClick={() => setAba(a.id)}
+              className={`flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-bold transition-all shadow-sm
+                ${aba===a.id ? `${a.cor} text-white shadow-md scale-105` : "bg-white text-[#5c1e3c] border-2 border-[#5c1e3c] hover:bg-[#f5ede8]"}`}>
+              <span>{a.emoji}</span> {a.label}
+            </button>
           ))}
-        </div>
+        </nav>
+
+        <p className="text-xs text-gray-400 mt-3">
+          Atualizado: {ultima||"carregando..."} ·
+          <button onClick={carregar} className="ml-1 text-[#b5895a] underline hover:text-[#5c1e3c]">atualizar agora</button>
+        </p>
       </header>
-      <main className="max-w-7xl mx-auto px-6 py-6">
-        {aba === "dashboard" && <TabDashboard vendas={vendas} estoque={estoque} />}
-        {aba === "calendario" && <TabCalendario eventos={eventos} />}
+
+      {/* Conteúdo */}
+      <main className="max-w-6xl mx-auto px-4 pb-12">
+        {aba==="calendario" && <TelaCalendario eventos={eventos} />}
+        {aba==="vendas"     && <TelaVendas vendas={vendas} />}
+        {aba==="processos"  && <TelaProcessos processos={processos} />}
+        {aba==="estoque"    && <TelaEstoque estoque={estoque} />}
       </main>
-      <footer className="text-center text-xs text-gray-400 py-4">
-        Velloso Cidadania · <button onClick={carregar} className="text-blue-400 underline">Atualizar agora</button>
+
+      <footer className="text-center text-xs text-gray-400 pb-6">
+        Velloso Cidadania · Sistema de Gestão 2026
       </footer>
     </div>
   );
