@@ -1,466 +1,319 @@
-﻿import { useState, useEffect, useCallback } from "react";
+﻿import { useEffect, useState } from "react";
 
-const SHEETS = {
-  processos:  "https://docs.google.com/spreadsheets/d/e/2PACX-1vSLRDqgcYE4QpXZ3WeGzr5nDeeEVvIDPOVmTdshA0lZEGZA9m3PZSVRBZh30_sROKFJFd4Ll3l-Ar_v/pub?output=csv",
-  vendas:     "https://docs.google.com/spreadsheets/d/e/2PACX-1vRkhaBtnf2pTwGdZh8VroPSlvAjgfikS2pzrswllPTBJuYQrrB8PEJXKRUvqdzl7oLsU37gMGKEd-qC/pub?output=csv",
-  estoque:    "https://docs.google.com/spreadsheets/d/e/2PACX-1vRf8q8phpvkyqstNVcnwL-kpT890VivYhVTIf7zbMsncHk5dcp-_DHGFjzD_5usua-CzsEfRPyPnnn7/pub?output=csv",
-  calendario: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSDxyW-yoO1Y9YngZEL5L4uAKx8Vd9A18Y7oF7OdqvjIUJBGdnuakVX6FJz63m1kb2TnkpFyuGNAuVz/pub?output=csv",
-};
-
-function parseCSV(text) {
-  const lines = text.trim().split("\n");
-  if (lines.length < 2) return [];
-  const headers = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/"/g, ""));
-  return lines.slice(1).map((line) => {
-    const values = [];
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function parseCsv(text) {
+  const lines = text.replace(/^\uFEFF/, "").split("\n").map(l => l.trim()).filter(Boolean);
+  const result = [];
+  for (const line of lines) {
+    const cols = [];
     let cur = "", inQ = false;
-    for (const ch of line) {
-      if (ch === '"') { inQ = !inQ; continue; }
-      if (ch === "," && !inQ) { values.push(cur.trim()); cur = ""; continue; }
-      cur += ch;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') { inQ = !inQ; continue; }
+      if (c === "," && !inQ) { cols.push(cur.trim()); cur = ""; continue; }
+      cur += c;
     }
-    values.push(cur.trim());
-    const row = {};
-    headers.forEach((h, i) => { row[h] = values[i] ?? ""; });
-    return row;
-  });
-}
-
-function col(row, ...keys) {
-  for (const k of keys) {
-    const match = Object.keys(row).find((r) => r.includes(k.toLowerCase()));
-    if (match && row[match] !== undefined && row[match] !== "") return row[match];
+    cols.push(cur.trim());
+    result.push(cols);
   }
-  return "";
+  return result;
 }
 
-function useSheet(url) {
-  const [data, setData] = useState([]);
-  const [error, setError] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const load = useCallback(async () => {
+function brl(val) {
+  const n = parseFloat(String(val).replace(/[^0-9,.-]/g, "").replace(",", "."));
+  if (isNaN(n)) return "R$ 0,00";
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+async function fetchCsv(url) {
+  const res = await fetch(url);
+  return res.text();
+}
+
+// ── URLs ──────────────────────────────────────────────────────────────────────
+const URL_PROCESSOS  = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSLRDqgcYE4QpXZ3WeGzr5nDeeEVvIDPOVmTdshA0lZEGZA9m3PZSVRBZh30_sROKFJFd4Ll3l-Ar_v/pub?output=csv";
+const URL_VENDAS     = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRkhaBtnf2pTwGdZh8VroPSlvAjgfikS2pzrswllPTBJuYQrrB8PEJXKRUvqdzl7oLsU37gMGTEd-qC/pub?output=csv";
+const URL_ESTOQUE    = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRf8q8phpvkyqstNVcnwL-kpT890VivYhVTIf7zbMsncHk5dcp-_DHGFjzD_5usua-CzsEfRPyPnnn7/pub?output=csv";
+const URL_CALENDARIO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSDxyW-yoO1Y9YngZEL5L4uAKx8Vd9A18Y7oF7OdqvjIUJBGdnuakVX6FJz63m1kb2TnkpFyuGNAuVz/pub?output=csv";
+
+// ── Parsers com colunas reais ─────────────────────────────────────────────────
+function parseVendas(text) {
+  const rows = parseCsv(text);
+  // cabeçalho real na linha 2 (índice 2): ["", "Cliente", "Serviço Contratado", "Valor"]
+  // dados começam na linha 4 (índice 4)
+  const data = [];
+  let totalGeral = 0;
+  for (let i = 4; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r[1] || r[1].match(/^\d+$/) || !r[3]) continue; // pula totais e vazios
+    const valor = parseFloat(String(r[3]).replace(/[^0-9,]/g, "").replace(",", ".")) || 0;
+    if (valor === 0) continue;
+    data.push({ cliente: r[1], servico: r[2] || "", valor });
+    totalGeral += valor;
+  }
+
+  // Mix de serviços por tipo real
+  const tipoMap = {};
+  for (const d of data) {
+    const s = d.servico.toLowerCase();
+    let tipo = "Outros";
+    if (s.includes("consular"))    tipo = "Serviço Consular";
+    if (s.includes("passaporte"))  tipo = "Passaporte";
+    if (s.includes("visto"))       tipo = "Visto";
+    if (s.includes("cidadania"))   tipo = "Cidadania";
+    if (s.includes("apostila"))    tipo = "Apostila";
+    tipoMap[tipo] = (tipoMap[tipo] || 0) + d.valor;
+  }
+
+  return { vendas: data, total: totalGeral, mix: tipoMap };
+}
+
+function parseEstoque(text) {
+  const rows = parseCsv(text);
+  // linha 0: título com emoji → pular
+  // linha 1: cabeçalhos reais: ITEM, CATEGORIA, FREQUÊNCIA, ÚLTIMA COMPRA, PRÓXIMA COMPRA, QUANTIDADE, VALOR UNIT. (R$), VALOR TOTAL (R$), DIAS
+  const header = rows[1];
+  const idxItem   = header.indexOf("ITEM");
+  const idxCat    = header.indexOf("CATEGORIA");
+  const idxQtd    = header.indexOf("QUANTIDADE");
+  const idxValU   = header.indexOf("VALOR UNIT. (R$)");
+  const idxValT   = header.indexOf("VALOR TOTAL (R$)");
+  const idxProx   = header.indexOf("PRÓXIMA COMPRA");
+  const result = [];
+  for (let i = 2; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r[idxItem]) continue;
+    result.push({
+      item:      r[idxItem],
+      categoria: r[idxCat]  || "",
+      qtd:       r[idxQtd]  || "0",
+      valorUnit: r[idxValU] || "0",
+      valorTotal:r[idxValT] || "0",
+      proxCompra:r[idxProx] || "",
+    });
+  }
+  return result;
+}
+
+function parseCalendario(text) {
+  const rows = parseCsv(text);
+  // colunas: Data, Nome, Tipo, País, Natureza
+  const hoje = new Date();
+  const result = [];
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r[0] || !r[1]) continue;
+    const [d, m, a] = r[0].split("/");
+    const data = new Date(`${a}-${m}-${d}`);
+    const diff = Math.ceil((data - hoje) / 86400000);
+    if (diff >= 0 && diff <= 60) {
+      result.push({ data: r[0], nome: r[1], tipo: r[2] || "", diff });
+    }
+  }
+  return result.sort((a, b) => a.diff - b.diff).slice(0, 8);
+}
+
+// ── Componentes ───────────────────────────────────────────────────────────────
+function Card({ title, value, sub, gradient }) {
+  return (
+    <div className={`rounded-2xl p-5 text-white shadow-lg ${gradient}`}>
+      <p className="text-sm font-medium opacity-80">{title}</p>
+      <p className="text-3xl font-bold mt-1">{value}</p>
+      {sub && <p className="text-xs mt-1 opacity-70">{sub}</p>}
+    </div>
+  );
+}
+
+function Badge({ label, color }) {
+  const map = {
+    green:  "bg-green-100 text-green-800",
+    blue:   "bg-blue-100 text-blue-800",
+    yellow: "bg-yellow-100 text-yellow-800",
+    red:    "bg-red-100 text-red-800",
+    purple: "bg-purple-100 text-purple-800",
+  };
+  return (
+    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${map[color] || map.blue}`}>
+      {label}
+    </span>
+  );
+}
+
+// ── App Principal ─────────────────────────────────────────────────────────────
+export default function App() {
+  const [vendas,     setVendas]     = useState(null);
+  const [estoque,    setEstoque]    = useState([]);
+  const [calendario, setCalendario] = useState([]);
+  const [ultima,     setUltima]     = useState("");
+
+  async function carregar() {
     try {
-      const res = await fetch(url + "&t=" + Date.now());
-      setData(parseCSV(await res.text()));
-      setError(false);
-    } catch { setError(true); }
-    finally { setLoading(false); }
-  }, [url]);
-  useEffect(() => { load(); const id = setInterval(load, 30000); return () => clearInterval(id); }, [load]);
-  return { data, error, loading };
-}
+      const [tv, te, tc] = await Promise.all([
+        fetchCsv(URL_VENDAS),
+        fetchCsv(URL_ESTOQUE),
+        fetchCsv(URL_CALENDARIO),
+      ]);
+      setVendas(parseVendas(tv));
+      setEstoque(parseEstoque(te));
+      setCalendario(parseCalendario(tc));
+      setUltima(new Date().toLocaleTimeString("pt-BR"));
+    } catch (e) {
+      console.error(e);
+    }
+  }
 
-function Badge({ label, color = "gray" }) {
-  const c = { green:"bg-green-100 text-green-800", yellow:"bg-yellow-100 text-yellow-800", red:"bg-red-100 text-red-800", blue:"bg-blue-100 text-blue-800", gray:"bg-gray-100 text-gray-700", purple:"bg-purple-100 text-purple-800" };
-  return <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${c[color]??c.gray}`}>{label}</span>;
-}
+  useEffect(() => {
+    carregar();
+    const t = setInterval(carregar, 30000);
+    return () => clearInterval(t);
+  }, []);
 
-function KpiCard({ title, value, sub, color="blue" }) {
-  const r = { blue:"border-blue-400", green:"border-green-400", yellow:"border-yellow-400", red:"border-red-400", purple:"border-purple-400" };
+  const mix = vendas?.mix || {};
+  const mixTotal = Object.values(mix).reduce((a, b) => a + b, 0);
+  const cores = ["bg-blue-500","bg-green-500","bg-purple-500","bg-yellow-500","bg-red-500","bg-pink-500"];
+
   return (
-    <div className={`bg-white rounded-2xl shadow p-5 border-l-4 ${r[color]??r.blue}`}>
-      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{title}</p>
-      <p className="text-2xl font-bold text-gray-800">{value}</p>
-      {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
-    </div>
-  );
-}
-
-function Bar({ pct, color="blue" }) {
-  const bg = { blue:"bg-blue-500", green:"bg-green-500", yellow:"bg-yellow-400", red:"bg-red-500" };
-  return (
-    <div className="w-full bg-gray-100 rounded-full h-2">
-      <div className={`h-2 rounded-full ${bg[color]??bg.blue} transition-all`} style={{width:`${Math.min(100,Math.max(0,pct))}%`}} />
-    </div>
-  );
-}
-
-function Offline() {
-  return <div className="flex items-center gap-2 text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 text-sm"><span>âš ï¸</span> Planilha offline. Dados podem estar desatualizados.</div>;
-}
-
-function sColor(s="") {
-  s=s.toLowerCase();
-  if(s.includes("conclu")||s.includes("entregue")||s.includes("pronto")) return "green";
-  if(s.includes("andamento")||s.includes("em curso")) return "blue";
-  if(s.includes("aguard")||s.includes("pendente")) return "yellow";
-  if(s.includes("cancel")||s.includes("bloqueado")) return "red";
-  return "gray";
-}
-
-function sPct(s="") {
-  s=s.toLowerCase();
-  if(s.includes("conclu")||s.includes("entregue")) return 100;
-  if(s.includes("andamento")) return 60;
-  if(s.includes("aguard")||s.includes("pendente")) return 30;
-  if(s.includes("cancel")) return 0;
-  return 20;
-}
-
-const TABS = ["Visao Geral","Processos","Vendas","Estoque","Financeiro","Tarefas","Calendario"];
-
-function TabVisaoGeral({ processos, vendas, estoque }) {
-  const totalReceita = vendas.data.reduce((acc,r) => acc + (parseFloat(col(r,"valor","receita","total").replace(/[^\d.,]/g,"").replace(",","."))||0), 0);
-  const clientesAtivos = processos.data.filter(r => { const s=col(r,"status").toLowerCase(); return !s.includes("cancel")&&!s.includes("conclu")&&r[Object.keys(r)[0]]; }).length;
-  const ticket = vendas.data.length>0 ? totalReceita/vendas.data.length : 0;
-  const srvMap = {};
-  processos.data.forEach(r => { const s=col(r,"servico","tipo","produto","categoria")||"Outros"; srvMap[s]=(srvMap[s]||0)+1; });
-  const alertas = estoque.data.filter(r => (parseFloat(col(r,"qtd","quantidade","estoque"))||0) <= (parseFloat(col(r,"min","minimo"))||2));
-  return (
-    <div className="space-y-6">
-      {(processos.error||vendas.error||estoque.error)&&<Offline/>}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard title="Contratos ativos" value={clientesAtivos||"â€”"} sub="sem cancelados" color="blue"/>
-        <KpiCard title="Receita total" value={totalReceita?`R$ ${totalReceita.toLocaleString("pt-BR",{minimumFractionDigits:2})}`:"â€”"} color="green"/>
-        <KpiCard title="Ticket medio" value={ticket?`R$ ${ticket.toLocaleString("pt-BR",{minimumFractionDigits:2})}`:"â€”"} color="purple"/>
-        <KpiCard title="Alertas estoque" value={alertas.length||"0"} color={alertas.length>0?"red":"green"}/>
+    <div className="min-h-screen bg-gray-100 p-6 font-sans">
+      {/* Header */}
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">🏛️ Velloso Cidadania</h1>
+          <p className="text-sm text-gray-500">Dashboard operacional</p>
+        </div>
+        <div className="text-xs text-gray-400">
+          Atualizado: {ultima || "carregando..."}<br />
+          <button onClick={carregar} className="mt-1 text-blue-500 underline">Atualizar agora</button>
+        </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+      {/* Cards KPI */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <Card
+          title="Vendas do Mês"
+          value={brl(vendas?.total || 0)}
+          sub={`${vendas?.vendas?.length || 0} contratos`}
+          gradient="bg-gradient-to-br from-blue-500 to-blue-700"
+        />
+        <Card
+          title="Itens em Estoque"
+          value={estoque.length}
+          sub="categorias ativas"
+          gradient="bg-gradient-to-br from-green-500 to-green-700"
+        />
+        <Card
+          title="Eventos (60 dias)"
+          value={calendario.length}
+          sub="próximos compromissos"
+          gradient="bg-gradient-to-br from-purple-500 to-purple-700"
+        />
+        <Card
+          title="Tipos de Serviço"
+          value={Object.keys(mix).length}
+          sub="no mês atual"
+          gradient="bg-gradient-to-br from-orange-500 to-orange-700"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Vendas */}
         <div className="bg-white rounded-2xl shadow p-5">
-          <h3 className="font-semibold text-gray-700 mb-3">Mix de servicos</h3>
-          {Object.keys(srvMap).length===0?<p className="text-sm text-gray-400">Sem dados.</p>:(
-            <ul className="space-y-2">
-              {Object.entries(srvMap).sort((a,b)=>b[1]-a[1]).map(([s,n])=>(
-                <li key={s} className="flex items-center gap-3">
-                  <span className="text-sm text-gray-600 w-40 truncate">{s}</span>
-                  <div className="flex-1"><Bar pct={(n/processos.data.length)*100} color="blue"/></div>
-                  <span className="text-xs text-gray-500 w-6 text-right">{n}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        <div className="bg-white rounded-2xl shadow p-5">
-          <h3 className="font-semibold text-gray-700 mb-3">Alertas de estoque</h3>
-          {alertas.length===0?<p className="text-sm text-green-600">Estoque OK.</p>:(
-            <ul className="space-y-2">
-              {alertas.map((r,i)=>(
-                <li key={i} className="flex items-center justify-between text-sm">
-                  <span className="text-gray-700">{col(r,"item","nome","produto")||`Item ${i+1}`}</span>
-                  <Badge label={`Qtd: ${col(r,"qtd","quantidade","estoque")}`} color="red"/>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-      <div className="bg-white rounded-2xl shadow p-5">
-        <h3 className="font-semibold text-gray-700 mb-2">Sobre o escritorio</h3>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm text-gray-600">
-          <div>Cidadania italiana</div><div>Passaporte / AIRE</div><div>Declaracao de Valor</div>
-          <div>Prenotami</div><div>~80 contratos ativos</div><div>Meta: R$50k/mes</div>
-        </div>
-        <p className="text-xs text-gray-400 mt-3">Decreto 36/2025 â€” restricao via judicial em vigor.</p>
-      </div>
-    </div>
-  );
-}
-
-function TabProcessos({ processos }) {
-  const [busca,setBusca]=useState("");
-  const [filtro,setFiltro]=useState("Todos");
-  const statuses=["Todos",...Array.from(new Set(processos.data.map(r=>col(r,"status")).filter(Boolean)))];
-  const lista=processos.data.filter(r=>{
-    const n=col(r,"nome","cliente","razao").toLowerCase();
-    const s=col(r,"servico","tipo","produto").toLowerCase();
-    const st=col(r,"status");
-    return (busca===""||n.includes(busca.toLowerCase())||s.includes(busca.toLowerCase()))&&(filtro==="Todos"||st===filtro);
-  });
-  return (
-    <div className="space-y-4">
-      {processos.error&&<Offline/>}
-      <div className="flex flex-wrap gap-3">
-        <input className="border rounded-xl px-3 py-2 text-sm flex-1 min-w-48 focus:outline-none focus:ring-2 focus:ring-blue-300" placeholder="Buscar cliente ou servico..." value={busca} onChange={e=>setBusca(e.target.value)}/>
-        <select className="border rounded-xl px-3 py-2 text-sm" value={filtro} onChange={e=>setFiltro(e.target.value)}>
-          {statuses.map(s=><option key={s}>{s}</option>)}
-        </select>
-      </div>
-      {processos.loading?<p className="text-sm text-gray-400">Carregando...</p>:lista.length===0?<p className="text-sm text-gray-400">Nenhum processo.</p>:(
-        <div className="space-y-3">
-          {lista.map((r,i)=>{
-            const nome=col(r,"nome","cliente","razao")||`Cliente ${i+1}`;
-            const srv=col(r,"servico","tipo","produto")||"â€”";
-            const st=col(r,"status")||"â€”";
-            const obs=col(r,"obs","observacao","nota");
-            const p=sPct(st); const c=sColor(st);
-            return (
-              <div key={i} className="bg-white rounded-2xl shadow p-4">
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div><p className="font-semibold text-gray-800">{nome}</p><p className="text-xs text-gray-500">{srv}</p></div>
-                  <Badge label={st} color={c}/>
+          <h2 className="font-bold text-gray-700 mb-4">💼 Vendas do Mês</h2>
+          <div className="space-y-3 max-h-64 overflow-y-auto">
+            {(vendas?.vendas || []).map((v, i) => (
+              <div key={i} className="flex items-center justify-between border-b pb-2">
+                <div>
+                  <p className="font-medium text-gray-800 text-sm">{v.cliente}</p>
+                  <Badge label={v.servico || "Serviço"} color="blue" />
                 </div>
-                <Bar pct={p} color={c==="gray"?"blue":c}/>
-                <p className="text-xs text-right text-gray-400 mt-1">{p}%</p>
-                {obs&&<p className="text-xs text-gray-500 mt-1 italic">{obs}</p>}
+                <p className="font-bold text-green-600 text-sm">{brl(v.valor)}</p>
               </div>
-            );
-          })}
+            ))}
+            {!vendas && <p className="text-gray-400 text-sm">Carregando...</p>}
+          </div>
         </div>
-      )}
-    </div>
-  );
-}
 
-function TabVendas({ vendas }) {
-  const total=vendas.data.reduce((a,r)=>a+(parseFloat(col(r,"valor","receita","total").replace(/[^\d.,]/g,"").replace(",","."))||0),0);
-  const por={};
-  vendas.data.forEach(r=>{
-    const d=col(r,"data","date","mes"); const k=d?d.slice(0,7):"s/d";
-    por[k]=(por[k]||0)+(parseFloat(col(r,"valor","receita","total").replace(/[^\d.,]/g,"").replace(",","."))||0);
-  });
-  const meses=Object.entries(por).sort((a,b)=>a[0].localeCompare(b[0]));
-  const mx=Math.max(...meses.map(([,v])=>v),1);
-  return (
-    <div className="space-y-4">
-      {vendas.error&&<Offline/>}
-      <div className="grid grid-cols-2 gap-4">
-        <KpiCard title="Receita total" value={`R$ ${total.toLocaleString("pt-BR",{minimumFractionDigits:2})}`} color="green"/>
-        <KpiCard title="Num de vendas" value={vendas.data.length} color="blue"/>
-      </div>
-      {meses.length>0&&(
+        {/* Mix de Serviços */}
         <div className="bg-white rounded-2xl shadow p-5">
-          <h3 className="font-semibold text-gray-700 mb-4">Receita por mes</h3>
+          <h2 className="font-bold text-gray-700 mb-4">📊 Mix de Serviços</h2>
           <div className="space-y-3">
-            {meses.map(([m,v])=>(
-              <div key={m} className="flex items-center gap-3">
-                <span className="text-xs text-gray-500 w-16">{m}</span>
-                <div className="flex-1"><Bar pct={(v/mx)*100} color="green"/></div>
-                <span className="text-xs text-gray-600 w-28 text-right">R$ {v.toLocaleString("pt-BR",{minimumFractionDigits:2})}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      <div className="bg-white rounded-2xl shadow p-5">
-        <h3 className="font-semibold text-gray-700 mb-3">Historico</h3>
-        {vendas.loading?<p className="text-sm text-gray-400">Carregando...</p>:vendas.data.length===0?<p className="text-sm text-gray-400">Sem registros.</p>:(
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead><tr className="text-left text-xs text-gray-400 border-b">{Object.keys(vendas.data[0]).slice(0,6).map(h=><th key={h} className="pb-2 pr-4 font-medium capitalize">{h}</th>)}</tr></thead>
-              <tbody>{vendas.data.map((r,i)=><tr key={i} className="border-b last:border-0 hover:bg-gray-50">{Object.values(r).slice(0,6).map((v,j)=><td key={j} className="py-2 pr-4 text-gray-700">{v}</td>)}</tr>)}</tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function TabEstoque({ estoque }) {
-  return (
-    <div className="space-y-4">
-      {estoque.error&&<Offline/>}
-      {estoque.loading?<p className="text-sm text-gray-400">Carregando...</p>:estoque.data.length===0?<p className="text-sm text-gray-400">Sem itens.</p>:(
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {estoque.data.map((r,i)=>{
-            const nome=col(r,"item","nome","produto")||`Item ${i+1}`;
-            const qtd=parseFloat(col(r,"qtd","quantidade","estoque"))||0;
-            const min=parseFloat(col(r,"min","minimo"))||2;
-            const al=qtd<=min;
-            return (
-              <div key={i} className={`bg-white rounded-2xl shadow p-4 border-l-4 ${al?"border-red-400":"border-green-400"}`}>
-                <div className="flex justify-between items-center mb-2">
-                  <p className="font-medium text-gray-800">{nome}</p>
-                  <Badge label={al?"Repor":"OK"} color={al?"red":"green"}/>
-                </div>
-                <div className="flex gap-4 text-sm text-gray-500">
-                  <span>Qtd: <strong className="text-gray-800">{qtd}</strong></span>
-                  <span>Min: <strong className="text-gray-800">{min}</strong></span>
-                </div>
-                <Bar pct={min>0?(qtd/(min*3))*100:100} color={al?"red":"green"}/>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TabFinanceiro() {
-  const LIMITE=500;
-  const [gastos,setGastos]=useState([
-    {desc:"Cafe + material escritorio",valor:45.90,data:"2026-04-15"},
-    {desc:"Impressao documentos",valor:28.00,data:"2026-04-16"},
-  ]);
-  const [desc,setDesc]=useState(""); const [val,setVal]=useState(""); const [dt,setDt]=useState(new Date().toISOString().slice(0,10));
-  const total=gastos.reduce((a,g)=>a+g.valor,0);
-  const saldo=LIMITE-total; const pct=(total/LIMITE)*100;
-  function add(){if(!desc||!val)return;setGastos([...gastos,{desc,valor:parseFloat(val),data:dt}]);setDesc("");setVal("");setDt(new Date().toISOString().slice(0,10));}
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        <KpiCard title="Limite cartao" value={`R$ ${LIMITE.toFixed(2)}`} color="blue"/>
-        <KpiCard title="Gasto acumulado" value={`R$ ${total.toFixed(2)}`} color={pct>80?"red":"yellow"}/>
-        <KpiCard title="Saldo disponivel" value={`R$ ${saldo.toFixed(2)}`} color={saldo<50?"red":"green"}/>
-      </div>
-      <div className="bg-white rounded-2xl shadow p-5">
-        <div className="flex justify-between items-center mb-2">
-          <h3 className="font-semibold text-gray-700">Uso do cartao</h3>
-          <span className="text-sm text-gray-500">{pct.toFixed(0)}%</span>
-        </div>
-        <Bar pct={pct} color={pct>80?"red":pct>50?"yellow":"green"}/>
-      </div>
-      <div className="bg-white rounded-2xl shadow p-5">
-        <h3 className="font-semibold text-gray-700 mb-3">Registrar gasto</h3>
-        <div className="flex flex-wrap gap-2">
-          <input className="border rounded-xl px-3 py-2 text-sm flex-1 min-w-40" placeholder="Descricao" value={desc} onChange={e=>setDesc(e.target.value)}/>
-          <input className="border rounded-xl px-3 py-2 text-sm w-28" placeholder="Valor R$" type="number" value={val} onChange={e=>setVal(e.target.value)}/>
-          <input className="border rounded-xl px-3 py-2 text-sm w-36" type="date" value={dt} onChange={e=>setDt(e.target.value)}/>
-          <button onClick={add} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm hover:bg-blue-700">+ Adicionar</button>
-        </div>
-      </div>
-      <div className="bg-white rounded-2xl shadow p-5">
-        <h3 className="font-semibold text-gray-700 mb-3">Lancamentos</h3>
-        {gastos.length===0?<p className="text-sm text-gray-400">Nenhum.</p>:(
-          <ul className="divide-y">
-            {gastos.map((g,i)=>(
-              <li key={i} className="flex items-center justify-between py-2 text-sm">
-                <div><p className="text-gray-800">{g.desc}</p><p className="text-xs text-gray-400">{g.data}</p></div>
-                <div className="flex items-center gap-3">
-                  <span className="font-medium text-gray-700">R$ {g.valor.toFixed(2)}</span>
-                  <button onClick={()=>setGastos(gastos.filter((_,j)=>j!==i))} className="text-red-400 hover:text-red-600 text-xs">x</button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-}
-
-const PRIOS=["alta","media","baixa"];
-const PC={alta:"red",media:"yellow",baixa:"gray"};
-
-function TabTarefas() {
-  const [tarefas,setTarefas]=useState([
-    {t:"Enviar documentos cliente Silva",p:"alta",f:false},
-    {t:"Ligar para consulado SP",p:"alta",f:false},
-    {t:"Atualizar planilha processos",p:"media",f:false},
-    {t:"Reuniao Rodrigo - MKT",p:"media",f:true},
-    {t:"Repor papel A4",p:"baixa",f:false},
-  ]);
-  const [txt,setTxt]=useState(""); const [prio,setPrio]=useState("media");
-  function add(){if(!txt.trim())return;setTarefas([{t:txt.trim(),p:prio,f:false},...tarefas]);setTxt("");}
-  const pend=tarefas.filter(x=>!x.f); const conc=tarefas.filter(x=>x.f);
-  return (
-    <div className="space-y-4">
-      <div className="bg-white rounded-2xl shadow p-5">
-        <h3 className="font-semibold text-gray-700 mb-3">Nova tarefa</h3>
-        <div className="flex gap-2 flex-wrap">
-          <input className="border rounded-xl px-3 py-2 text-sm flex-1 min-w-48" placeholder="Descricao..." value={txt} onChange={e=>setTxt(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()}/>
-          <select className="border rounded-xl px-3 py-2 text-sm" value={prio} onChange={e=>setPrio(e.target.value)}>{PRIOS.map(p=><option key={p}>{p}</option>)}</select>
-          <button onClick={add} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm hover:bg-blue-700">+ Adicionar</button>
-        </div>
-      </div>
-      {[["Pendentes",pend],["Concluidas",conc]].map(([label,lista])=>lista.length>0&&(
-        <div key={label} className="bg-white rounded-2xl shadow p-5">
-          <h3 className="font-semibold text-gray-700 mb-3">{label} ({lista.length})</h3>
-          <ul className="space-y-2">
-            {lista.map(item=>{
-              const i=tarefas.indexOf(item);
+            {Object.entries(mix).map(([tipo, val], i) => {
+              const pct = mixTotal > 0 ? Math.round((val / mixTotal) * 100) : 0;
               return (
-                <li key={i} className="flex items-center gap-3">
-                  <input type="checkbox" checked={item.f} onChange={()=>setTarefas(tarefas.map((x,j)=>j===i?{...x,f:!x.f}:x))} className="w-4 h-4 accent-blue-600"/>
-                  <span className={`flex-1 text-sm ${item.f?"line-through text-gray-400":"text-gray-800"}`}>{item.t}</span>
-                  <Badge label={item.p} color={PC[item.p]}/>
-                  <button onClick={()=>setTarefas(tarefas.filter((_,j)=>j!==i))} className="text-gray-300 hover:text-red-400 text-xs">x</button>
-                </li>
+                <div key={tipo}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-gray-700 font-medium">{tipo}</span>
+                    <span className="text-gray-500">{pct}% · {brl(val)}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className={`${cores[i % cores.length]} h-2 rounded-full transition-all`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
               );
             })}
-          </ul>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function TabCalendario({ calendario }) {
-  const hoje=new Date().toISOString().slice(0,10);
-  const ev=calendario.data.map(r=>({
-    data:col(r,"data","date","dia"),titulo:col(r,"titulo","evento","nome","descricao"),
-    tipo:col(r,"tipo","categoria"),hora:col(r,"hora","horario","time"),
-  })).filter(e=>e.titulo).sort((a,b)=>a.data.localeCompare(b.data));
-  const fut=ev.filter(e=>e.data>=hoje); const pas=ev.filter(e=>e.data<hoje);
-  function tc(t=""){t=t.toLowerCase();if(t.includes("reunia"))return"blue";if(t.includes("prazo"))return"red";if(t.includes("consular"))return"purple";return"gray";}
-  return (
-    <div className="space-y-4">
-      {calendario.error&&<Offline/>}
-      {calendario.loading?<p className="text-sm text-gray-400">Carregando...</p>:ev.length===0?<p className="text-sm text-gray-400">Sem eventos.</p>:(
-        <>
-          <div className="bg-white rounded-2xl shadow p-5">
-            <h3 className="font-semibold text-gray-700 mb-3">Proximos eventos ({fut.length})</h3>
-            {fut.length===0?<p className="text-sm text-gray-400">Sem eventos futuros.</p>:(
-              <ul className="space-y-3">
-                {fut.map((e,i)=>(
-                  <li key={i} className="flex items-start gap-3">
-                    <div className="bg-blue-50 rounded-xl px-3 py-2 text-center min-w-14">
-                      <p className="text-xs text-blue-400 font-medium">{e.data.slice(5,7)}/{e.data.slice(0,4)}</p>
-                      <p className="text-lg font-bold text-blue-700">{e.data.slice(8,10)}</p>
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-gray-800">{e.titulo}</p>
-                      {e.hora&&<p className="text-xs text-gray-400">{e.hora}</p>}
-                      {e.tipo&&<Badge label={e.tipo} color={tc(e.tipo)}/>}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+            {Object.keys(mix).length === 0 && <p className="text-gray-400 text-sm">Carregando...</p>}
           </div>
-          {pas.length>0&&(
-            <div className="bg-white rounded-2xl shadow p-5 opacity-60">
-              <h3 className="font-semibold text-gray-500 mb-3">Passados ({pas.length})</h3>
-              <ul className="space-y-2">
-                {pas.slice(-5).reverse().map((e,i)=>(
-                  <li key={i} className="flex gap-3 text-sm text-gray-500">
-                    <span className="w-20">{e.data}</span>
-                    <span className="line-through">{e.titulo}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
+        </div>
+      </div>
 
-export default function App() {
-  const [aba,setAba]=useState("Visao Geral");
-  const processos=useSheet(SHEETS.processos);
-  const vendas=useSheet(SHEETS.vendas);
-  const estoque=useSheet(SHEETS.estoque);
-  const calendario=useSheet(SHEETS.calendario);
-  const [att,setAtt]=useState(new Date());
-  useEffect(()=>{const id=setInterval(()=>setAtt(new Date()),30000);return()=>clearInterval(id);},[]);
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b shadow-sm sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-gray-800">Dashboard Jennifer</h1>
-            <p className="text-xs text-gray-400">Velloso Cidadania - atualiza a cada 30s</p>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Estoque */}
+        <div className="bg-white rounded-2xl shadow p-5">
+          <h2 className="font-bold text-gray-700 mb-4">📦 Estoque</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500 border-b">
+                  <th className="pb-2">Item</th>
+                  <th className="pb-2">Categoria</th>
+                  <th className="pb-2 text-center">Qtd</th>
+                  <th className="pb-2 text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {estoque.map((e, i) => (
+                  <tr key={i} className="border-b last:border-0">
+                    <td className="py-2 font-medium text-gray-800">{e.item}</td>
+                    <td className="py-2"><Badge label={e.categoria} color="green" /></td>
+                    <td className="py-2 text-center text-gray-600">{e.qtd}</td>
+                    <td className="py-2 text-right text-gray-700">{brl(e.valorTotal)}</td>
+                  </tr>
+                ))}
+                {estoque.length === 0 && (
+                  <tr><td colSpan={4} className="text-gray-400 py-4 text-center">Carregando...</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
-          <p className="text-xs text-gray-400 hidden sm:block">Ultima att: {att.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}</p>
         </div>
-        <div className="max-w-5xl mx-auto px-4 flex gap-1 overflow-x-auto">
-          {TABS.map(t=>(
-            <button key={t} onClick={()=>setAba(t)} className={`px-3 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${aba===t?"border-blue-600 text-blue-600":"border-transparent text-gray-500 hover:text-gray-700"}`}>{t}</button>
-          ))}
+
+        {/* Calendário */}
+        <div className="bg-white rounded-2xl shadow p-5">
+          <h2 className="font-bold text-gray-700 mb-4">📅 Próximos Eventos (60 dias)</h2>
+          <div className="space-y-3 max-h-64 overflow-y-auto">
+            {calendario.map((e, i) => {
+              const color = e.diff <= 7 ? "red" : e.diff <= 15 ? "yellow" : "blue";
+              return (
+                <div key={i} className="flex items-start justify-between border-b pb-2">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">{e.nome}</p>
+                    <Badge label={e.tipo} color={color} />
+                  </div>
+                  <div className="text-right ml-3 flex-shrink-0">
+                    <p className="text-xs text-gray-500">{e.data}</p>
+                    <p className={`text-xs font-bold ${e.diff <= 7 ? "text-red-500" : "text-gray-400"}`}>
+                      {e.diff === 0 ? "Hoje!" : `em ${e.diff}d`}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+            {calendario.length === 0 && <p className="text-gray-400 text-sm">Nenhum evento próximo.</p>}
+          </div>
         </div>
-      </header>
-      <main className="max-w-5xl mx-auto px-4 py-6">
-        {aba==="Visao Geral"&&<TabVisaoGeral processos={processos} vendas={vendas} estoque={estoque}/>}
-        {aba==="Processos"&&<TabProcessos processos={processos}/>}
-        {aba==="Vendas"&&<TabVendas vendas={vendas}/>}
-        {aba==="Estoque"&&<TabEstoque estoque={estoque}/>}
-        {aba==="Financeiro"&&<TabFinanceiro/>}
-        {aba==="Tarefas"&&<TabTarefas/>}
-        {aba==="Calendario"&&<TabCalendario calendario={calendario}/>}
-      </main>
+      </div>
     </div>
   );
 }
