@@ -1,6 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
 
-/* ── helpers ── */
 function parseCsv(text) {
   const lines = text.replace(/^\uFEFF/, "").split("\n").map(l => l.trim()).filter(Boolean);
   return lines.map(line => {
@@ -20,13 +19,11 @@ function brl(val) {
 }
 async function fetchCsv(url) { const r = await fetch(url); return r.text(); }
 
-/* ── URLs ── */
 const U_VENDAS     = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRkhaBtnf2pTwGdZh8VroPSlvAjgfikS2pzrswllPTBJuYQrrB8PEJXKRUvqdzl7oLsU37gMGTEd-qC/pub?output=csv";
 const U_ESTOQUE    = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRf8q8phpvkyqstNVcnwL-kpT890VivYhVTIf7zbMsncHk5dcp-_DHGFjzD_5usua-CzsEfRPyPnnn7/pub?output=csv";
 const U_CALENDARIO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSDxyW-yoO1Y9YngZEL5L4uAKx8Vd9A18Y7oF7OdqvjIUJBGdnuakVX6FJz63m1kb2TnkpFyuGNAuVz/pub?output=csv";
 const U_PROCESSOS  = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSLRDqgcYE4QpXZ3WeGzr5nDeeEVvIDPOVmTdshA0lZEGZA9m3PZSVRBZh30_sROKFJFd4Ll3l-Ar_v/pub?output=csv";
 
-/* ── parsers ── */
 function parseVendas(text) {
   const rows = parseCsv(text); const data = []; let total = 0;
   for (let i = 4; i < rows.length; i++) {
@@ -34,13 +31,13 @@ function parseVendas(text) {
     if (!r[1] || r[1].match(/^\d+$/) || !r[3]) continue;
     const valor = parseFloat(String(r[3]).replace(/[^0-9,]/g,"").replace(",",".")) || 0;
     if (valor === 0) continue;
-    data.push({ vendedor: r[0]||"", cliente: r[1], servico: r[2]||"Serviço", valor }); total += valor;
+    data.push({ vendedor: r[0]||"", cliente: r[1], servico: r[2]||"Servico", valor }); total += valor;
   }
   const mix = {};
   for (const d of data) {
     const s = d.servico.toLowerCase();
     let t = "Outros";
-    if (s.includes("consular")) t="Serviço Consular";
+    if (s.includes("consular")) t="Servico Consular";
     else if (s.includes("passaporte")) t="Passaporte";
     else if (s.includes("visto")) t="Visto";
     else if (s.includes("cidadania")) t="Cidadania";
@@ -77,41 +74,100 @@ function parseProcessos(text) {
   return result.filter(p=>p.pasta&&p.familia);
 }
 
-/* ── utils ── */
-const WEEKDAYS = ["SEG","TER","QUA","QUI","SEX","SÁB","DOM"];
-const MONTHS = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+const WEEKDAYS = ["SEG","TER","QUA","QUI","SEX","SAB","DOM"];
+const MONTHS = ["Janeiro","Fevereiro","Marco","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+const MONTHS_DISPLAY = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+const WEEKDAYS_DISPLAY = ["SEG","TER","QUA","QUI","SEX","SÁB","DOM"];
+
 function evtIcon(tipo) {
   if(!tipo) return "📅";
-  if(tipo.includes("Aniversário")||tipo.includes("Aniversario")) return "🎂";
+  if(tipo.includes("niversrio")||tipo.includes("niversario")||tipo.includes("niversário")) return "🎂";
   if(tipo.includes("Feriado")) return "🎉";
   if(tipo.includes("Cultural")) return "🎭";
   return "⭐";
 }
 function evtColor(tipo) {
   if(!tipo) return { bg:"bg-[#592343]/10", border:"border-[#592343]", text:"text-[#592343]" };
-  if(tipo.includes("Aniversário")||tipo.includes("Aniversario")) return { bg:"bg-[#592343]/10", border:"border-[#592343]", text:"text-[#592343]" };
+  if(tipo.includes("niversrio")||tipo.includes("niversario")||tipo.includes("niversário")) return { bg:"bg-[#592343]/10", border:"border-[#592343]", text:"text-[#592343]" };
   if(tipo.includes("Feriado")) return { bg:"bg-[#ce2b37]/10", border:"border-[#ce2b37]", text:"text-[#ce2b37]" };
   if(tipo.includes("Cultural")) return { bg:"bg-[#00924a]/10", border:"border-[#00924a]", text:"text-[#00924a]" };
   return { bg:"bg-[#592343]/10", border:"border-[#592343]", text:"text-[#592343]" };
 }
-function flagPais(pais) {
-  if(!pais) return "🌍";
-  if(pais.includes("Brasil")) return "🇧🇷";
-  if(pais.includes("It")) return "🇮🇹";
-  return "🌍";
+
+/* ── Logo Velloso (SVG idêntico à marca) ── */
+function LogoVelloso() {
+  return (
+    <div className="flex flex-col items-center">
+      {/* Círculo com globo */}
+      <div style={{
+        width: 96, height: 96,
+        borderRadius: "50%",
+        border: "2px solid #592343",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        marginBottom: 20
+      }}>
+        <svg viewBox="0 0 80 80" width="64" height="64" fill="none" stroke="#592343" strokeWidth="1.4" strokeLinecap="round">
+          {/* Globo - círculo externo */}
+          <circle cx="40" cy="40" r="28" />
+          {/* Meridiano central vertical */}
+          <path d="M40 12 C32 20 32 60 40 68" />
+          <path d="M40 12 C48 20 48 60 40 68" />
+          {/* Meridianos laterais */}
+          <path d="M40 12 C22 22 18 58 40 68" />
+          <path d="M40 12 C58 22 62 58 40 68" />
+          {/* Paralelos */}
+          <path d="M13 32 Q40 26 67 32" />
+          <path d="M12 48 Q40 54 68 48" />
+          {/* Equador */}
+          <path d="M12 40 Q40 38 68 40" />
+        </svg>
+      </div>
+      {/* VELLOSO */}
+      <div style={{
+        fontFamily: "Georgia, 'Times New Roman', serif",
+        fontSize: 52,
+        fontWeight: 700,
+        letterSpacing: "0.08em",
+        color: "#592343",
+        lineHeight: 1,
+        marginBottom: 6
+      }}>VELLOSO</div>
+      {/* CIDADANIA */}
+      <div style={{
+        fontFamily: "Inter, 'Segoe UI', sans-serif",
+        fontSize: 13,
+        fontWeight: 400,
+        letterSpacing: "0.5em",
+        color: "#8b6b7d",
+        textTransform: "uppercase",
+        marginBottom: 4
+      }}>CIDADANIA</div>
+    </div>
+  );
 }
 
-/* ── NAV ── */
 const TABS = [
-  { id:"calendario", label:"Calendário",  icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" strokeWidth="2"/><line x1="16" y1="2" x2="16" y2="6" strokeWidth="2"/><line x1="8" y1="2" x2="8" y2="6" strokeWidth="2"/><line x1="3" y1="10" x2="21" y2="10" strokeWidth="2"/></svg>, cor:"bg-[#592343]" },
-  { id:"vendas",     label:"Vendas",       icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17" strokeWidth="2"/><polyline points="16 7 22 7 22 13" strokeWidth="2"/></svg>, cor:"bg-[#8b6b7d]" },
-  { id:"processos",  label:"Processos",    icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" strokeWidth="2"/><polyline points="14 2 14 8 20 8" strokeWidth="2"/><line x1="16" y1="13" x2="8" y2="13" strokeWidth="2"/><line x1="16" y1="17" x2="8" y2="17" strokeWidth="2"/></svg>, cor:"bg-[#6b3a5d]" },
-  { id:"estoque",    label:"Estoque",      icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" strokeWidth="2"/></svg>, cor:"bg-[#ce2b37]" },
+  { id:"calendario", label:"Calendário",  cor:"#592343" },
+  { id:"vendas",     label:"Vendas",       cor:"#8b6b7d" },
+  { id:"processos",  label:"Processos",    cor:"#6b3a5d" },
+  { id:"estoque",    label:"Estoque",      cor:"#ce2b37" },
 ];
 
-/* ══════════════════════════════════════════
-   TELA CALENDÁRIO
-══════════════════════════════════════════ */
+function IconCalendario() {
+  return <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" strokeWidth="2"/><line x1="16" y1="2" x2="16" y2="6" strokeWidth="2"/><line x1="8" y1="2" x2="8" y2="6" strokeWidth="2"/><line x1="3" y1="10" x2="21" y2="10" strokeWidth="2"/></svg>;
+}
+function IconVendas() {
+  return <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17" strokeWidth="2"/><polyline points="16 7 22 7 22 13" strokeWidth="2"/></svg>;
+}
+function IconProcessos() {
+  return <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" strokeWidth="2"/><polyline points="14 2 14 8 20 8" strokeWidth="2"/><line x1="16" y1="13" x2="8" y2="13" strokeWidth="2"/><line x1="16" y1="17" x2="8" y2="17" strokeWidth="2"/></svg>;
+}
+function IconEstoque() {
+  return <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" strokeWidth="2"/></svg>;
+}
+const tabIcons = { calendario:<IconCalendario/>, vendas:<IconVendas/>, processos:<IconProcessos/>, estoque:<IconEstoque/> };
+
+/* ══ CALENDÁRIO ══ */
 function TelaCalendario({ eventos }) {
   const hoje = new Date();
   const [mes, setMes] = useState(hoje.getMonth());
@@ -125,7 +181,6 @@ function TelaCalendario({ eventos }) {
   const firstDow = new Date(ano,mes,1).getDay();
   const offset = firstDow===0?6:firstDow-1;
   const diasNoMes = new Date(ano,mes+1,0).getDate();
-
   const calDays = [...Array(offset).fill(null), ...Array.from({length:diasNoMes},(_,i)=>i+1)];
   const weeks = [];
   for(let i=0;i<calDays.length;i+=7) weeks.push(calDays.slice(i,i+7));
@@ -137,48 +192,44 @@ function TelaCalendario({ eventos }) {
   return (
     <div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
-        {/* Calendário */}
-        <div className="lg:col-span-2 bg-white rounded-lg shadow-lg p-6 md:p-8">
+        <div className="lg:col-span-2 bg-white rounded-xl shadow-lg p-6 md:p-8">
           <div className="flex items-center justify-between mb-6">
-            <button onClick={()=>{const d=new Date(ano,mes-1);setMes(d.getMonth());setAno(d.getFullYear());setDiaSel(null);}}
-              className="p-2 hover:bg-[#f5ede8] rounded-lg transition-colors">
+            <button onClick={()=>{const d=new Date(ano,mes-1);setMes(d.getMonth());setAno(d.getFullYear());setDiaSel(null);}} className="p-2 hover:bg-[#f5ede8] rounded-lg transition-colors">
               <svg className="w-6 h-6 text-[#592343]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6" strokeWidth="2"/></svg>
             </button>
-            <h3 className="text-2xl font-bold text-[#592343]">{MONTHS[mes]}</h3>
-            <button onClick={()=>{const d=new Date(ano,mes+1);setMes(d.getMonth());setAno(d.getFullYear());setDiaSel(null);}}
-              className="p-2 hover:bg-[#f5ede8] rounded-lg transition-colors">
+            <h3 className="text-2xl font-bold text-[#592343]">{MONTHS_DISPLAY[mes]}</h3>
+            <button onClick={()=>{const d=new Date(ano,mes+1);setMes(d.getMonth());setAno(d.getFullYear());setDiaSel(null);}} className="p-2 hover:bg-[#f5ede8] rounded-lg transition-colors">
               <svg className="w-6 h-6 text-[#592343]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" strokeWidth="2"/></svg>
             </button>
           </div>
-
-          <div className="grid grid-cols-7 gap-2 mb-4">
-            {WEEKDAYS.map(d=><div key={d} className="text-center font-bold text-[#592343] text-sm py-2">{d}</div>)}
+          <div className="grid grid-cols-7 gap-1 mb-3">
+            {WEEKDAYS_DISPLAY.map(d=><div key={d} className="text-center font-bold text-[#592343] text-xs py-2">{d}</div>)}
           </div>
-
-          <div className="space-y-2">
+          <div className="space-y-1">
             {weeks.map((week,wi)=>(
-              <div key={wi} className="grid grid-cols-7 gap-2">
+              <div key={wi} className="grid grid-cols-7 gap-1">
                 {week.map((day,di)=>{
                   const evts = day?porDia[day]:null;
-                  const hasAniv = evts?.some(e=>e.tipo.includes("Aniversário")||e.tipo.includes("Aniversario"));
+                  const hasAniv = evts?.some(e=>e.tipo.includes("niversrio")||e.tipo.includes("niversario")||e.tipo.includes("niversário"));
                   const hasEsp = evts?.some(e=>e.tipo.includes("Feriado")||e.tipo.includes("Cultural"));
                   const isHoje = day===hoje.getDate()&&mes===hoje.getMonth()&&ano===hoje.getFullYear();
                   const isSel = day===diaSel;
                   return (
                     <button key={di} onClick={()=>day&&setDiaSel(day===diaSel?null:day)}
-                      className={`aspect-square rounded-lg p-1 text-sm font-semibold transition-all relative
-                        ${!day?"bg-transparent pointer-events-none":""}
-                        ${day&&!evts?"bg-[#f5ede8] text-[#2a2a2a] hover:bg-[#e8ddd4] border border-[#e8ddd4]":""}
-                        ${day&&hasEsp?"bg-gradient-to-br from-[#ce2b37]/15 to-[#ce2b37]/5 text-[#592343] hover:from-[#ce2b37]/25 border-2 border-[#ce2b37]":""}
-                        ${day&&hasAniv&&!hasEsp?"bg-gradient-to-br from-[#592343]/10 to-[#592343]/5 text-[#592343] hover:from-[#592343]/20 border-2 border-[#592343]":""}
-                        ${isSel?"ring-2 ring-[#592343] ring-offset-2":""}
-                        ${isHoje&&!isSel?"ring-2 ring-[#ce2b37] ring-offset-1":""}
-                      `}>
+                      className={[
+                        "aspect-square rounded-lg text-sm font-semibold transition-all relative flex flex-col items-center justify-center",
+                        !day?"pointer-events-none opacity-0":"",
+                        day&&!evts?"bg-[#f5ede8] text-[#2a2a2a] hover:bg-[#e8ddd4] border border-[#e8ddd4]":"",
+                        day&&hasEsp?"bg-[#ce2b37]/10 text-[#592343] border-2 border-[#ce2b37]":"",
+                        day&&hasAniv&&!hasEsp?"bg-[#592343]/10 text-[#592343] border-2 border-[#592343]":"",
+                        isSel?"ring-2 ring-[#592343] ring-offset-2":"",
+                        isHoje&&!isSel?"ring-2 ring-[#ce2b37] ring-offset-1":"",
+                      ].filter(Boolean).join(" ")}>
                       {day&&<>
-                        <div>{day}</div>
-                        {evts&&<div className="absolute top-1 right-1 flex gap-0.5">
-                          {hasEsp&&<div className="w-2 h-2 bg-[#ce2b37] rounded-full"/>}
-                          {hasAniv&&<div className="w-2 h-2 bg-[#592343] rounded-full"/>}
+                        <span>{day}</span>
+                        {evts&&<div className="flex gap-0.5 mt-0.5">
+                          {hasEsp&&<div className="w-1.5 h-1.5 bg-[#ce2b37] rounded-full"/>}
+                          {hasAniv&&<div className="w-1.5 h-1.5 bg-[#592343] rounded-full"/>}
                         </div>}
                       </>}
                     </button>
@@ -187,34 +238,32 @@ function TelaCalendario({ eventos }) {
               </div>
             ))}
           </div>
-
-          <div className="mt-8 pt-6 border-t border-[#e8ddd4]">
-            <h4 className="font-bold text-[#592343] text-sm mb-3">Legenda</h4>
-            <div className="grid grid-cols-2 gap-3 text-xs text-[#2a2a2a]">
-              <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-gradient-to-br from-[#592343]/10 to-[#592343]/5 border-2 border-[#592343]"/><span>Aniversários</span></div>
-              <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-gradient-to-br from-[#ce2b37]/15 to-[#ce2b37]/5 border-2 border-[#ce2b37]"/><span>Feriados / Eventos</span></div>
-              <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-[#f5ede8] border border-[#e8ddd4]"/><span>Sem eventos</span></div>
+          <div className="mt-6 pt-5 border-t border-[#e8ddd4]">
+            <p className="font-bold text-[#592343] text-xs mb-3">LEGENDA</p>
+            <div className="flex flex-wrap gap-4 text-xs text-[#2a2a2a]">
+              <div className="flex items-center gap-2"><div className="w-3.5 h-3.5 rounded border-2 border-[#592343] bg-[#592343]/10"/><span>Aniversários</span></div>
+              <div className="flex items-center gap-2"><div className="w-3.5 h-3.5 rounded border-2 border-[#ce2b37] bg-[#ce2b37]/10"/><span>Feriados / Eventos</span></div>
+              <div className="flex items-center gap-2"><div className="w-3.5 h-3.5 rounded border border-[#e8ddd4] bg-[#f5ede8]"/><span>Sem eventos</span></div>
             </div>
           </div>
         </div>
 
-        {/* Sidebar */}
         <div className="lg:col-span-1">
-          <div className="bg-white rounded-lg shadow-lg p-6 md:p-8 sticky top-4">
-            <h3 className="text-2xl font-bold text-[#592343] mb-4">
-              {diaSel ? `${diaSel} de ${MONTHS[mes]}` : "Selecione um dia"}
+          <div className="bg-white rounded-xl shadow-lg p-6 sticky top-4">
+            <h3 className="text-xl font-bold text-[#592343] mb-1">
+              {diaSel ? `${diaSel} de ${MONTHS_DISPLAY[mes]}` : "Selecione um dia"}
             </h3>
-            <div className="border-t-2 border-[#592343] pt-4">
+            <div className="border-t-2 border-[#592343] pt-4 mt-3">
               {diaSel && evDia.length>0 ? (
                 <div className="space-y-3">
                   {evDia.map((e,i)=>{
                     const c=evtColor(e.tipo);
                     return <div key={i} className={`p-3 rounded-lg text-sm ${c.bg} ${c.text} border ${c.border}/30`}>
                       <div className="flex items-start gap-2">
-                        <span className="text-lg">{evtIcon(e.tipo)}</span>
+                        <span className="text-base">{evtIcon(e.tipo)}</span>
                         <div>
-                          <div className="font-semibold">{e.nome.replace("Aniversário: ","")}</div>
-                          <div className="text-xs opacity-75">{e.tipo} · {flagPais(e.pais)} {e.pais}</div>
+                          <div className="font-semibold text-sm">{e.nome}</div>
+                          <div className="text-xs opacity-70 mt-0.5">{e.tipo} · {e.pais}</div>
                         </div>
                       </div>
                     </div>;
@@ -226,14 +275,14 @@ function TelaCalendario({ eventos }) {
                 <>
                   <p className="text-[#8b6b7d] text-sm mb-4">Clique em um dia do calendário para ver os eventos</p>
                   {proximos.length>0&&<>
-                    <p className="text-xs font-bold text-[#592343] uppercase tracking-wider mb-3">Próximos 30 dias</p>
+                    <p className="text-xs font-bold text-[#592343] uppercase tracking-widest mb-3">Próximos eventos</p>
                     <div className="space-y-2">
                       {proximos.map((e,i)=>{
                         const diff=Math.ceil((e.dateObj-new Date())/86400000);
-                        return <div key={i} className="flex items-center gap-2 py-1.5 border-b border-[#f5ede8] last:border-0">
-                          <span>{evtIcon(e.tipo)}</span>
+                        return <div key={i} className="flex items-center gap-2 py-2 border-b border-[#f5ede8] last:border-0">
+                          <span className="text-sm">{evtIcon(e.tipo)}</span>
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-[#2a2a2a] truncate">{e.nome.replace("Aniversário: ","")}</p>
+                            <p className="text-xs font-semibold text-[#2a2a2a] truncate">{e.nome}</p>
                             <p className="text-xs text-[#8b6b7d]">{e.data}</p>
                           </div>
                           <span className={`text-xs font-bold flex-shrink-0 ${diff===0?"text-[#ce2b37]":diff<=3?"text-[#592343]":"text-[#8b6b7d]"}`}>
@@ -250,23 +299,20 @@ function TelaCalendario({ eventos }) {
         </div>
       </div>
 
-      {/* Destaques do mês */}
       {Object.keys(porDia).length>0&&(
-        <div className="mt-12 max-w-6xl mx-auto">
-          <div className="bg-white rounded-lg shadow-lg p-6 md:p-8">
-            <h3 className="text-3xl font-bold text-[#592343] mb-6">Destaques de {MONTHS[mes]}</h3>
+        <div className="mt-10 max-w-6xl mx-auto">
+          <div className="bg-white rounded-xl shadow-lg p-6 md:p-8">
+            <h3 className="text-2xl font-bold text-[#592343] mb-5">Destaques de {MONTHS_DISPLAY[mes]}</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {Object.entries(porDia).sort(([a],[b])=>parseInt(a)-parseInt(b)).map(([dia,evts])=>(
                 <div key={dia} className="border-l-4 border-[#592343] pl-4 py-2">
-                  <div className="font-bold text-[#592343] mb-1">{dia} de {MONTHS[mes]}</div>
-                  <div className="space-y-1">
-                    {evts.map((e,i)=>{
-                      const c=evtColor(e.tipo);
-                      return <div key={i} className={`text-sm flex items-center gap-2 ${c.text} ${e.tipo.includes("Feriado")||e.tipo.includes("Cultural")?"font-semibold":""}`}>
-                        <span>{evtIcon(e.tipo)}</span>{e.nome.replace("Aniversário: ","")}
-                      </div>;
-                    })}
-                  </div>
+                  <div className="font-bold text-[#592343] mb-1 text-sm">{dia} de {MONTHS_DISPLAY[mes]}</div>
+                  {evts.map((e,i)=>{
+                    const c=evtColor(e.tipo);
+                    return <div key={i} className={`text-sm flex items-center gap-2 ${c.text}`}>
+                      <span>{evtIcon(e.tipo)}</span>{e.nome}
+                    </div>;
+                  })}
                 </div>
               ))}
             </div>
@@ -277,9 +323,7 @@ function TelaCalendario({ eventos }) {
   );
 }
 
-/* ══════════════════════════════════════════
-   TELA VENDAS
-══════════════════════════════════════════ */
+/* ══ VENDAS ══ */
 function TelaVendas({ vendas }) {
   const mix = vendas?.mix||{};
   const mt = Object.values(mix).reduce((a,b)=>a+b,0);
@@ -288,23 +332,23 @@ function TelaVendas({ vendas }) {
     <div className="max-w-6xl mx-auto space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {[
-          {label:"Total do Mês",val:brl(vendas?.total||0),cor:"border-[#592343]"},
-          {label:"Contratos",val:vendas?.vendas?.length||0,cor:"border-[#8b6b7d]"},
-          {label:"Ticket Médio",val:brl(vendas?.vendas?.length?(vendas.total/vendas.vendas.length):0),cor:"border-[#ce2b37]"},
+          {label:"Total do Mes",val:brl(vendas?.total||0),cor:"border-[#592343]"},
+          {label:"Contratos",val:(vendas?.vendas?.length||0),cor:"border-[#8b6b7d]"},
+          {label:"Ticket Medio",val:brl(vendas?.vendas?.length?(vendas.total/vendas.vendas.length):0),cor:"border-[#ce2b37]"},
         ].map(c=>(
-          <div key={c.label} className={`bg-white rounded-lg shadow-lg p-5 border-l-4 ${c.cor}`}>
+          <div key={c.label} className={`bg-white rounded-xl shadow-lg p-5 border-l-4 ${c.cor}`}>
             <p className="text-xs text-[#8b6b7d] uppercase font-semibold tracking-wider">{c.label}</p>
             <p className="text-2xl font-bold text-[#592343] mt-1">{c.val}</p>
           </div>
         ))}
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h3 className="text-xl font-bold text-[#592343] mb-2">Contratos do Mês</h3>
-          <div className="border-t-2 border-[#592343] pt-4 space-y-3 max-h-80 overflow-y-auto">
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <h3 className="text-xl font-bold text-[#592343] mb-2">Contratos do Mes</h3>
+          <div className="border-t-2 border-[#592343] pt-4 space-y-2 max-h-80 overflow-y-auto">
             {(vendas?.vendas||[]).map((v,i)=>(
               <div key={i} className="flex items-center gap-3 py-2 border-b border-[#f5ede8] last:border-0">
-                <div className="w-9 h-9 rounded-full bg-[#f5ede8] flex items-center justify-center text-[#592343] font-bold text-sm flex-shrink-0">
+                <div className="w-8 h-8 rounded-full bg-[#592343] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
                   {v.cliente.charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -314,11 +358,11 @@ function TelaVendas({ vendas }) {
                 <p className="font-bold text-[#592343] text-sm flex-shrink-0">{brl(v.valor)}</p>
               </div>
             ))}
-            {!vendas&&<p className="text-[#8b6b7d] text-center py-8">Carregando...</p>}
+            {!vendas&&<p className="text-[#8b6b7d] text-center py-8 text-sm">Carregando...</p>}
           </div>
         </div>
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h3 className="text-xl font-bold text-[#592343] mb-2">Mix de Serviços</h3>
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <h3 className="text-xl font-bold text-[#592343] mb-2">Mix de Servicos</h3>
           <div className="border-t-2 border-[#592343] pt-4 space-y-4">
             {Object.entries(mix).map(([tipo,val],i)=>{
               const pct=mt>0?Math.round((val/mt)*100):0;
@@ -328,7 +372,7 @@ function TelaVendas({ vendas }) {
                   <span className="text-[#8b6b7d] text-xs">{pct}% · {brl(val)}</span>
                 </div>
                 <div className="w-full bg-[#f5ede8] rounded-full h-2">
-                  <div className={`${cores[i%cores.length]} h-2 rounded-full transition-all duration-700`} style={{width:`${pct}%`}}/>
+                  <div className={`${cores[i%cores.length]} h-2 rounded-full`} style={{width:`${pct}%`}}/>
                 </div>
               </div>;
             })}
@@ -343,9 +387,7 @@ function TelaVendas({ vendas }) {
   );
 }
 
-/* ══════════════════════════════════════════
-   TELA PROCESSOS
-══════════════════════════════════════════ */
+/* ══ PROCESSOS ══ */
 function TelaProcessos({ processos }) {
   const [busca, setBusca] = useState("");
   const fil = processos.filter(p=>
@@ -355,26 +397,26 @@ function TelaProcessos({ processos }) {
   );
   const etapaCor = e => {
     if(!e) return "bg-[#f5ede8] text-[#8b6b7d]";
-    if(e.includes("Concluí")||e.includes("Concluido")) return "bg-[#00924a]/10 text-[#00924a]";
+    if(e.includes("Conclu")) return "bg-[#00924a]/10 text-[#00924a]";
     if(e.includes("andamento")) return "bg-[#592343]/10 text-[#592343]";
     if(e.includes("Pendente")) return "bg-[#ce2b37]/10 text-[#ce2b37]";
     return "bg-[#f5ede8] text-[#8b6b7d]";
   };
   return (
     <div className="max-w-6xl mx-auto space-y-4">
-      <div className="bg-white rounded-lg shadow-lg p-4">
-        <input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Buscar por família, tipo ou etapa..."
-          className="w-full border border-[#e8ddd4] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-[#592343] transition"/>
+      <div className="bg-white rounded-xl shadow-lg p-4">
+        <input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Buscar por familia, tipo ou etapa..."
+          className="w-full border border-[#e8ddd4] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-[#592343] transition-colors"/>
       </div>
-      <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-        <div className="p-6 border-b border-[#e8ddd4] flex justify-between items-center">
+      <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+        <div className="p-5 border-b border-[#e8ddd4] flex justify-between items-center">
           <h3 className="text-xl font-bold text-[#592343]">Controle de Processos</h3>
           <span className="text-sm text-[#8b6b7d]">{fil.length} processos</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-[#faf8f6]">
-              <tr>{["Pasta","Família","Tipo","Vendedor","Etapa","Prazo"].map(h=>(
+              <tr>{["Pasta","Familia","Tipo","Vendedor","Etapa","Prazo"].map(h=>(
                 <th key={h} className="text-left px-4 py-3 text-xs font-bold text-[#8b6b7d] uppercase tracking-wider">{h}</th>
               ))}</tr>
             </thead>
@@ -385,11 +427,11 @@ function TelaProcessos({ processos }) {
                   <td className="px-4 py-3 font-semibold text-[#2a2a2a]">{p.familia}</td>
                   <td className="px-4 py-3 text-[#2a2a2a]">{p.tipo}</td>
                   <td className="px-4 py-3 text-[#2a2a2a]">{p.vendedor}</td>
-                  <td className="px-4 py-3"><span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${etapaCor(p.etapa)}`}>{p.etapa||"—"}</span></td>
-                  <td className="px-4 py-3 text-xs text-[#8b6b7d]">{p.prazo||"—"}</td>
+                  <td className="px-4 py-3"><span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${etapaCor(p.etapa)}`}>{p.etapa||"--"}</span></td>
+                  <td className="px-4 py-3 text-xs text-[#8b6b7d]">{p.prazo||"--"}</td>
                 </tr>
               ))}
-              {fil.length===0&&<tr><td colSpan={6} className="text-center text-[#8b6b7d] py-10">Nenhum processo encontrado.</td></tr>}
+              {fil.length===0&&<tr><td colSpan={6} className="text-center text-[#8b6b7d] py-10 text-sm">Nenhum processo encontrado.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -398,19 +440,17 @@ function TelaProcessos({ processos }) {
   );
 }
 
-/* ══════════════════════════════════════════
-   TELA ESTOQUE
-══════════════════════════════════════════ */
+/* ══ ESTOQUE ══ */
 function TelaEstoque({ estoque }) {
   return (
-    <div className="max-w-6xl mx-auto bg-white rounded-lg shadow-lg overflow-hidden">
-      <div className="p-6 border-b border-[#e8ddd4]">
+    <div className="max-w-6xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden">
+      <div className="p-5 border-b border-[#e8ddd4]">
         <h3 className="text-xl font-bold text-[#592343]">Controle de Estoque</h3>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-[#faf8f6]">
-            <tr>{["Item","Categoria","Qtd","Valor Unit.","Total","Próx. Compra"].map(h=>(
+            <tr>{["Item","Categoria","Qtd","Valor Unit.","Total","Prox. Compra"].map(h=>(
               <th key={h} className="text-left px-4 py-3 text-xs font-bold text-[#8b6b7d] uppercase tracking-wider">{h}</th>
             ))}</tr>
           </thead>
@@ -425,7 +465,7 @@ function TelaEstoque({ estoque }) {
                 <td className="px-4 py-3 text-xs text-[#8b6b7d]">{e.proxCompra}</td>
               </tr>
             ))}
-            {estoque.length===0&&<tr><td colSpan={6} className="text-center text-[#8b6b7d] py-10">Carregando...</td></tr>}
+            {estoque.length===0&&<tr><td colSpan={6} className="text-center text-[#8b6b7d] py-10 text-sm">Carregando...</td></tr>}
           </tbody>
         </table>
       </div>
@@ -433,9 +473,7 @@ function TelaEstoque({ estoque }) {
   );
 }
 
-/* ══════════════════════════════════════════
-   APP
-══════════════════════════════════════════ */
+/* ══ APP ══ */
 export default function App() {
   const [aba, setAba] = useState("calendario");
   const [vendas, setVendas] = useState(null);
@@ -450,63 +488,71 @@ export default function App() {
       setVendas(parseVendas(tv)); setEstoque(parseEstoque(te));
       setEventos(parseCalendario(tc)); setProcessos(parseProcessos(tp));
       setUltima(new Date().toLocaleTimeString("pt-BR"));
-    } catch(e){console.error(e);}
+    } catch(e){ console.error(e); }
   }
 
   useEffect(()=>{ carregar(); const t=setInterval(carregar,30000); return()=>clearInterval(t); },[]);
 
-  const titulos = { calendario:"Calendário de Eventos", vendas:"Equipe Comercial", processos:"Processos / CRM", estoque:"Controle de Estoque" };
+  const titulos = { calendario:"Calendario de Eventos", vendas:"Equipe Comercial", processos:"Processos / CRM", estoque:"Controle de Estoque" };
 
   return (
     <div className="min-h-screen" style={{background:"#faf8f6"}}>
-      {/* Bandeira italiana */}
-      <div className="h-1 flex">
-        <div className="flex-1" style={{background:"#00924a"}}/>
-        <div className="flex-1 bg-white"/>
-        <div className="flex-1" style={{background:"#ce2b37"}}/>
+
+      {/* ── Faixa tricolor italiana no topo ── */}
+      <div style={{height:5, display:"flex"}}>
+        <div style={{flex:1, background:"#009246"}}/>
+        <div style={{flex:1, background:"#ffffff"}}/>
+        <div style={{flex:1, background:"#ce2b37"}}/>
       </div>
 
-      {/* Header */}
-      <div className="container py-12 md:py-16">
-        <div className="text-center mb-12">
-          <div className="mb-6 flex justify-center">
-            <img src="https://d2xsxph8kpxj0f.cloudfront.net/310519663399377122/PxMC8QzTeavCuPqp6NYMem/globo_transparente_b89ad2b6.png"
-              alt="Globo Velloso" className="h-24 w-auto" style={{mixBlendMode:"multiply"}}
-              onError={e=>{e.target.style.display="none";}}/>
-          </div>
-          <h1 className="text-5xl md:text-6xl font-bold text-[#592343] mb-2">VELLOSO</h1>
-          <p className="text-lg text-[#8b6b7d] tracking-widest mb-6">CIDADANIA</p>
-          <h2 className="text-3xl font-bold text-[#592343] mb-2">{titulos[aba]}</h2>
-          <p className="text-xl text-[#8b6b7d] mb-8">2026</p>
+      {/* ── Header ── */}
+      <div style={{maxWidth:1280, margin:"0 auto", padding:"48px 24px 0"}}>
+        <div style={{textAlign:"center", marginBottom:40}}>
 
-          {/* Nav */}
-          <div className="flex flex-col sm:flex-row gap-3 justify-center flex-wrap">
+          <LogoVelloso />
+
+          <h2 style={{
+            fontFamily:"Georgia,'Times New Roman',serif",
+            fontSize:26, fontWeight:700,
+            color:"#592343", marginBottom:4, marginTop:8
+          }}>{titulos[aba]}</h2>
+          <p style={{fontSize:16, color:"#8b6b7d", marginBottom:28}}>2026</p>
+
+          {/* ── Navegação ── */}
+          <div style={{display:"flex", flexWrap:"wrap", gap:10, justifyContent:"center", marginBottom:10}}>
             {TABS.map(t=>(
-              <button key={t.id} onClick={()=>setAba(t.id)}
-                className={`flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold transition-all
-                  ${aba===t.id ? `${t.cor} text-white shadow-md` : "bg-white text-[#592343] border-2 border-[#592343] hover:bg-[#f5ede8]"}`}>
-                {t.icon} {t.label}
+              <button key={t.id} onClick={()=>setAba(t.id)} style={{
+                display:"flex", alignItems:"center", gap:8,
+                padding:"10px 22px", borderRadius:8, fontWeight:600, fontSize:14,
+                cursor:"pointer", transition:"all .2s",
+                background: aba===t.id ? t.cor : "white",
+                color: aba===t.id ? "white" : "#592343",
+                border: aba===t.id ? `2px solid ${t.cor}` : "2px solid #592343",
+              }}>
+                {tabIcons[t.id]} {t.label}
               </button>
             ))}
           </div>
-          <p className="text-xs text-[#8b6b7d] mt-4">
-            Atualizado: {ultima||"carregando..."} ·
-            <button onClick={carregar} className="ml-1 text-[#592343] underline">atualizar agora</button>
+          <p style={{fontSize:11, color:"#8b6b7d", marginBottom:0}}>
+            Atualizado: {ultima||"carregando..."} &nbsp;·&nbsp;
+            <button onClick={carregar} style={{color:"#592343", textDecoration:"underline", background:"none", border:"none", cursor:"pointer", fontSize:11}}>
+              atualizar agora
+            </button>
           </p>
         </div>
 
-        {/* Conteúdo */}
+        {/* ── Conteúdo ── */}
         {aba==="calendario" && <TelaCalendario eventos={eventos}/>}
         {aba==="vendas"     && <TelaVendas vendas={vendas}/>}
         {aba==="processos"  && <TelaProcessos processos={processos}/>}
         {aba==="estoque"    && <TelaEstoque estoque={estoque}/>}
       </div>
 
-      {/* Footer */}
-      <div className="mt-16" style={{background:"#592343"}}>
-        <div className="container py-8 text-center">
-          <p className="text-lg font-semibold text-white">VELLOSO CIDADANIA</p>
-          <p className="text-sm text-white/70 mt-1">Assessoria em Cidadania Italiana</p>
+      {/* ── Footer ── */}
+      <div style={{marginTop:64, background:"#592343"}}>
+        <div style={{maxWidth:1280, margin:"0 auto", padding:"28px 24px", textAlign:"center"}}>
+          <p style={{color:"white", fontWeight:600, fontSize:16, fontFamily:"Georgia,'Times New Roman',serif"}}>VELLOSO CIDADANIA</p>
+          <p style={{color:"rgba(255,255,255,0.65)", fontSize:13, marginTop:4}}>Assessoria em Cidadania Italiana</p>
         </div>
       </div>
     </div>
