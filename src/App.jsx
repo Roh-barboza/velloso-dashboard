@@ -546,32 +546,100 @@ function TelaVendas({vendas}) {
                 </p>
               ) : (
                 <div className="space-y-4">
-                  {ranking.map(([nome, dados], i) => {
+
+                  {/* Destaque: Vendedor do Mês */}
+                  {(() => {
+                    const [nome, dados] = ranking[0];
+                    const totalGeral = ranking.reduce((s,[,d])=>s+d.total, 0);
+                    const share = totalGeral > 0 ? Math.round((dados.total/totalGeral)*100) : 0;
+                    return (
+                      <div className="rounded-xl p-4 mb-2" style={{background:"linear-gradient(135deg,#592343 0%,#8b3a6d 100%)"}}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-2xl">👑</span>
+                          <span className="text-xs font-bold uppercase tracking-widest text-white/70">Vendedor do Mês</span>
+                        </div>
+                        <p className="text-white text-xl font-bold leading-tight">{nome}</p>
+                        <div className="flex items-end justify-between mt-2 gap-4">
+                          <div>
+                            <p className="text-white/60 text-xs">{dados.contratos} contrato{dados.contratos>1?"s":""}</p>
+                            <p className="text-white text-2xl font-bold">{brl(dados.total)}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-white/60 text-xs">participação</p>
+                            <p className="text-white text-2xl font-bold">{share}%</p>
+                          </div>
+                        </div>
+                        {/* barra de participação */}
+                        <div className="mt-3 w-full bg-white/20 rounded-full h-1.5">
+                          <div className="h-1.5 rounded-full bg-white transition-all" style={{width:`${share}%`}}/>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Demais posições */}
+                  {ranking.slice(1).map(([nome, dados], i) => {
                     const pct = Math.round((dados.total / maxVend) * 100);
                     return (
                       <div key={nome}>
                         <div className="flex items-center justify-between mb-1">
                           <div className="flex items-center gap-2">
-                            <span className="text-lg w-6 flex-shrink-0">{MEDALHAS_VEND[i]}</span>
+                            <span className="text-base w-6 flex-shrink-0">{MEDALHAS_VEND[i+1]}</span>
                             <span className="text-sm font-semibold text-[#2a2a2a] truncate max-w-36">{nome}</span>
-                            <span className="text-xs text-[#8b6b7d]">
-                              {dados.contratos} venda{dados.contratos>1?"s":""}
-                            </span>
+                            <span className="text-xs text-[#8b6b7d]">{dados.contratos} venda{dados.contratos>1?"s":""}</span>
                           </div>
-                          <span className="text-sm font-bold whitespace-nowrap" style={{color:CORES_RANK[i]}}>
+                          <span className="text-sm font-bold whitespace-nowrap" style={{color:CORES_RANK[i+1]}}>
                             {brl(dados.total)}
                           </span>
                         </div>
                         <div className="w-full bg-[#f5ede8] rounded-full h-2">
-                          <div className="h-2 rounded-full transition-all" style={{width:`${pct}%`, background:CORES_RANK[i]}}/>
+                          <div className="h-2 rounded-full transition-all" style={{width:`${pct}%`, background:CORES_RANK[i+1]}}/>
                         </div>
                       </div>
                     );
                   })}
+
+                  {/* Total geral */}
+                  <div className="pt-3 border-t border-[#e8ddd4] flex justify-between items-center">
+                    <span className="text-sm text-[#8b6b7d]">Total da equipe</span>
+                    <span className="font-bold text-[#592343]">{brl(ranking.reduce((s,[,d])=>s+d.total,0))}</span>
+                  </div>
                 </div>
               )}
             </div>
           </div>
+
+          {/* 💎 Serviço mais caro */}
+          {(() => {
+            const todas = vendas?.vendas || [];
+            if (todas.length === 0) return null;
+            const top = todas.reduce((mx, v) => v.valor > mx.valor ? v : mx, todas[0]);
+            return (
+              <div className="bg-white rounded-xl shadow p-6">
+                <h3 className="text-xl font-bold text-[#592343] mb-2">💎 Maior Venda do Mês</h3>
+                <div className="border-t-2 border-[#592343] pt-4">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 text-white text-lg font-bold"
+                      style={{background:"linear-gradient(135deg,#ce2b37,#8b3a6d)"}}>
+                      {top.vendedor ? top.vendedor.charAt(0).toUpperCase() : top.cliente.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-[#8b6b7d] uppercase font-semibold tracking-wider mb-0.5">Serviço</p>
+                      <p className="font-bold text-[#2a2a2a] text-sm">{top.servico}</p>
+                      <p className="text-xs text-[#8b6b7d] mt-1">Cliente: <span className="text-[#592343] font-medium">{top.cliente}</span></p>
+                      {top.vendedor && (
+                        <p className="text-xs text-[#8b6b7d]">Vendedor: <span className="text-[#592343] font-medium">{top.vendedor}</span></p>
+                      )}
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-xs text-[#8b6b7d] uppercase font-semibold tracking-wider mb-0.5">Valor</p>
+                      <p className="text-2xl font-bold text-[#ce2b37]">{brl(top.valor)}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
     </div>
