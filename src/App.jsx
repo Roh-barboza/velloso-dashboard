@@ -460,8 +460,7 @@ function TelaVendas({vendas}) {
   // Ranking de vendedores
   const rankMap = {};
   (vendas?.vendas||[]).forEach(v => {
-    const vend = (v.vendedor||"").trim();
-    if (!vend) return;
+    const vend = (v.vendedor||"").trim() || "Não atribuído";
     if (!rankMap[vend]) rankMap[vend] = { total:0, contratos:0 };
     rankMap[vend].total     += v.valor;
     rankMap[vend].contratos += 1;
@@ -470,6 +469,7 @@ function TelaVendas({vendas}) {
     .sort((a,b) => b[1].total - a[1].total)
     .slice(0, 5);
   const maxVend = ranking.length > 0 ? ranking[0][1].total : 1;
+  const totalReal = vendas?.total || 0;
 
   return(
     <div className="space-y-6">
@@ -550,8 +550,7 @@ function TelaVendas({vendas}) {
                   {/* Destaque: Vendedor do Mês */}
                   {(() => {
                     const [nome, dados] = ranking[0];
-                    const totalGeral = ranking.reduce((s,[,d])=>s+d.total, 0);
-                    const share = totalGeral > 0 ? Math.round((dados.total/totalGeral)*100) : 0;
+                    const share = totalReal > 0 ? Math.round((dados.total/totalReal)*100) : 0;
                     return (
                       <div className="rounded-xl p-4 mb-2" style={{background:"linear-gradient(135deg,#592343 0%,#8b3a6d 100%)"}}>
                         <div className="flex items-center gap-2 mb-2">
@@ -602,7 +601,7 @@ function TelaVendas({vendas}) {
                   {/* Total geral */}
                   <div className="pt-3 border-t border-[#e8ddd4] flex justify-between items-center">
                     <span className="text-sm text-[#8b6b7d]">Total da equipe</span>
-                    <span className="font-bold text-[#592343]">{brl(ranking.reduce((s,[,d])=>s+d.total,0))}</span>
+                    <span className="font-bold text-[#592343]">{brl(totalReal)}</span>
                   </div>
                 </div>
               )}
