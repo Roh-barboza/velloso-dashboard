@@ -49,11 +49,41 @@ function parseVendas(text) {
   }
   return { vendas:data, total, mix };
 }
+function normStr(s) {
+  return (s||"").normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase().trim();
+}
 function parseEstoque(text) {
-  const rows = parseCsv(text); const h = rows[1]||[];
-  const idx = k => h.findIndex(x => x.includes(k));
-  const iI=idx("ITEM"),iC=idx("CATEGORIA"),iQ=idx("QUANTIDADE"),iU=idx("VALOR UNIT"),iT=idx("VALOR TOTAL"),iP=idx("PROXIMA");
-  return rows.slice(2).filter(r=>r[iI]).map(r=>({item:r[iI],categoria:r[iC]||"",qtd:r[iQ]||"0",valorUnit:r[iU]||"0",valorTotal:r[iT]||"0",proxCompra:r[iP]||""}));
+  const rows = parseCsv(text);
+  // Linha 0 = título mesclado, Linha 1 = cabeçalhos reais
+  const h = rows[1] || [];
+  // idx normaliza acentos para comparação segura
+  const idx = k => h.findIndex(x => normStr(x).includes(normStr(k)));
+
+  const iI  = idx("item");
+  const iC  = idx("categoria");
+  // "quantidade atual" deve vir ANTES de "quantidade" genérico para pegar a coluna certa
+  const iQA = idx("quantidade atual");   // coluna G — QUANTIDADE ATUAL
+  const iU  = idx("valor unit");         // coluna H
+  const iT  = idx("valor total");        // coluna I
+  const iP  = idx("proxima compra");     // coluna E — PRÓXIMA COMPRA (acento removido)
+
+  const SKIP = ["legenda","verde","amarelo","vermelho","compra distante","compra proxima","compra urgente"];
+
+  return rows.slice(2)
+    .filter(r => {
+      const nome = r[iI] || "";
+      if (!nome.trim()) return false;
+      const n = normStr(nome);
+      return !SKIP.some(s => n.includes(s));
+    })
+    .map(r => ({
+      item:       r[iI]  || "",
+      categoria:  r[iC]  || "",
+      qtd:        r[iQA] || "0",    // ← QUANTIDADE ATUAL (coluna G)
+      valorUnit:  r[iU]  || "0",
+      valorTotal: r[iT]  || "0",
+      proxCompra: r[iP]  || "",     // ← PRÓXIMA COMPRA (coluna E)
+    }));
 }
 function parseCalendario(text) {
   const rows = parseCsv(text); const result = [];
@@ -419,17 +449,36 @@ function TelaCalendario({eventos}) {
 }
 
 /* ── VENDAS ── */
+const MEDALHAS_VEND = ["🥇","🥈","🥉","4º","5º"];
+const CORES_RANK = ["#d97706","#8b6b7d","#6b3a5d","#592343","#8b6b7d"];
+
 function TelaVendas({vendas}) {
-  const mix=vendas?.mix||{};
-  const mt=Object.values(mix).reduce((a,b)=>a+b,0);
-  const cores=["bg-[#592343]","bg-[#ce2b37]","bg-[#8b6b7d]","bg-[#00924a]","bg-[#6b3a5d]"];
+  const mix  = vendas?.mix || {};
+  const mt   = Object.values(mix).reduce((a,b)=>a+b,0);
+  const cores = ["bg-[#592343]","bg-[#ce2b37]","bg-[#8b6b7d]","bg-[#00924a]","bg-[#6b3a5d]"];
+
+  // Ranking de vendedores
+  const rankMap = {};
+  (vendas?.vendas||[]).forEach(v => {
+    const vend = (v.vendedor||"").trim();
+    if (!vend) return;
+    if (!rankMap[vend]) rankMap[vend] = { total:0, contratos:0 };
+    rankMap[vend].total     += v.valor;
+    rankMap[vend].contratos += 1;
+  });
+  const ranking = Object.entries(rankMap)
+    .sort((a,b) => b[1].total - a[1].total)
+    .slice(0, 5);
+  const maxVend = ranking.length > 0 ? ranking[0][1].total : 1;
+
   return(
     <div className="space-y-6">
+      {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {[
-          {label:"Total do Mês",val:brl(vendas?.total||0),cor:"border-[#592343]"},
-          {label:"Contratos",val:vendas?.vendas?.length||0,cor:"border-[#8b6b7d]"},
-          {label:"Ticket Médio",val:brl(vendas?.vendas?.length?(vendas.total/vendas.vendas.length):0),cor:"border-[#ce2b37]"},
+          {label:"Total do Mês",  val:brl(vendas?.total||0),                                               cor:"border-[#592343]"},
+          {label:"Contratos",     val:vendas?.vendas?.length||0,                                            cor:"border-[#8b6b7d]"},
+          {label:"Ticket Médio",  val:brl(vendas?.vendas?.length?(vendas.total/vendas.vendas.length):0),   cor:"border-[#ce2b37]"},
         ].map(c=>(
           <div key={c.label} className={`bg-white rounded-xl shadow p-5 border-l-4 ${c.cor}`}>
             <p className="text-xs text-[#8b6b7d] uppercase font-semibold tracking-wider">{c.label}</p>
@@ -437,30 +486,91 @@ function TelaVendas({vendas}) {
           </div>
         ))}
       </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Contratos do Mês */}
         <div className="bg-white rounded-xl shadow p-6">
           <h3 className="text-xl font-bold text-[#592343] mb-2">Contratos do Mês</h3>
           <div className="border-t-2 border-[#592343] pt-4 space-y-2 max-h-96 overflow-y-auto">
             {(vendas?.vendas||[]).map((v,i)=>(
               <div key={i} className="flex items-center gap-3 py-2 border-b border-[#f5ede8] last:border-0">
-                <div className="w-8 h-8 rounded-full bg-[#592343] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">{v.cliente.charAt(0).toUpperCase()}</div>
-                <div className="flex-1 min-w-0"><p className="font-semibold text-sm truncate">{v.cliente}</p><p className="text-xs text-[#8b6b7d] truncate">{v.servico}</p></div>
-                <p className="font-bold text-[#592343] text-sm">{brl(v.valor)}</p>
+                <div className="w-8 h-8 rounded-full bg-[#592343] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                  {v.cliente.charAt(0).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm truncate">{v.cliente}</p>
+                  <p className="text-xs text-[#8b6b7d] truncate">{v.servico}</p>
+                </div>
+                <p className="font-bold text-[#592343] text-sm whitespace-nowrap">{brl(v.valor)}</p>
               </div>
             ))}
             {!vendas&&<p className="text-[#8b6b7d] text-center py-8 text-sm">Carregando...</p>}
           </div>
         </div>
-        <div className="bg-white rounded-xl shadow p-6">
-          <h3 className="text-xl font-bold text-[#592343] mb-2">Mix de Serviços</h3>
-          <div className="border-t-2 border-[#592343] pt-4 space-y-4">
-            {Object.entries(mix).map(([tipo,val],i)=>{const pct=mt>0?Math.round((val/mt)*100):0;return(
-              <div key={tipo}>
-                <div className="flex justify-between text-sm mb-1"><span className="font-medium">{tipo}</span><span className="text-xs text-[#8b6b7d]">{pct}% · {brl(val)}</span></div>
-                <div className="w-full bg-[#f5ede8] rounded-full h-2"><div className={`${cores[i%cores.length]} h-2 rounded-full`} style={{width:`${pct}%`}}/></div>
-              </div>
-            );})}
-            {mt>0&&<div className="pt-3 border-t border-[#e8ddd4] flex justify-between"><span className="text-sm text-[#8b6b7d]">Total</span><span className="font-bold text-[#592343]">{brl(mt)}</span></div>}
+
+        {/* Mix de Serviços + Ranking */}
+        <div className="space-y-6">
+          <div className="bg-white rounded-xl shadow p-6">
+            <h3 className="text-xl font-bold text-[#592343] mb-2">Mix de Serviços</h3>
+            <div className="border-t-2 border-[#592343] pt-4 space-y-4">
+              {Object.entries(mix).map(([tipo,val],i)=>{
+                const pct = mt>0 ? Math.round((val/mt)*100) : 0;
+                return(
+                  <div key={tipo}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="font-medium">{tipo}</span>
+                      <span className="text-xs text-[#8b6b7d]">{pct}% · {brl(val)}</span>
+                    </div>
+                    <div className="w-full bg-[#f5ede8] rounded-full h-2">
+                      <div className={`${cores[i%cores.length]} h-2 rounded-full`} style={{width:`${pct}%`}}/>
+                    </div>
+                  </div>
+                );
+              })}
+              {mt>0&&(
+                <div className="pt-3 border-t border-[#e8ddd4] flex justify-between">
+                  <span className="text-sm text-[#8b6b7d]">Total</span>
+                  <span className="font-bold text-[#592343]">{brl(mt)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 🏆 Ranking de Vendedores */}
+          <div className="bg-white rounded-xl shadow p-6">
+            <h3 className="text-xl font-bold text-[#592343] mb-2">🏆 Ranking do Mês</h3>
+            <div className="border-t-2 border-[#592343] pt-4">
+              {ranking.length === 0 ? (
+                <p className="text-sm text-[#8b6b7d] text-center py-4">
+                  Adicione a coluna <strong>Vendedor</strong> na planilha de vendas para ver o ranking.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {ranking.map(([nome, dados], i) => {
+                    const pct = Math.round((dados.total / maxVend) * 100);
+                    return (
+                      <div key={nome}>
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg w-6 flex-shrink-0">{MEDALHAS_VEND[i]}</span>
+                            <span className="text-sm font-semibold text-[#2a2a2a] truncate max-w-36">{nome}</span>
+                            <span className="text-xs text-[#8b6b7d]">
+                              {dados.contratos} venda{dados.contratos>1?"s":""}
+                            </span>
+                          </div>
+                          <span className="text-sm font-bold whitespace-nowrap" style={{color:CORES_RANK[i]}}>
+                            {brl(dados.total)}
+                          </span>
+                        </div>
+                        <div className="w-full bg-[#f5ede8] rounded-full h-2">
+                          <div className="h-2 rounded-full transition-all" style={{width:`${pct}%`, background:CORES_RANK[i]}}/>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -576,29 +686,78 @@ function TelaProcessos({processos}) {
   );
 }
 
+/* ── Helpers de data para estoque ── */
+function parseDateBR(s) {
+  if (!s) return null;
+  const [d,m,y] = s.trim().split(/[\/\-]/);
+  if (!d||!m||!y) return null;
+  return new Date(+y, +m-1, +d);
+}
+function diasRestantes(s) {
+  const dt = parseDateBR(s);
+  if (!dt) return null;
+  return Math.round((dt - new Date()) / 86400000);
+}
+function proxCompraStyle(dias) {
+  if (dias === null) return { cor:"#8b6b7d", label:null };
+  if (dias < 0)  return { cor:"#ce2b37", label:"Atrasado" };
+  if (dias < 15) return { cor:"#ce2b37", label:`${dias}d` };
+  if (dias < 30) return { cor:"#d97706", label:`${dias}d` };
+  return              { cor:"#00924a", label:`${dias}d` };
+}
+
 /* ── ESTOQUE ── */
 function TelaEstoque({estoque}) {
   return(
     <div className="bg-white rounded-xl shadow overflow-hidden">
-      <div className="p-5 border-b border-[#e8ddd4]"><h3 className="text-xl font-bold text-[#592343]">Controle de Estoque</h3></div>
+      <div className="p-5 border-b border-[#e8ddd4]">
+        <h3 className="text-xl font-bold text-[#592343]">Controle de Estoque</h3>
+        <div className="flex gap-4 mt-2 text-xs text-[#8b6b7d]">
+          <span><span className="inline-block w-2 h-2 rounded-full bg-[#00924a] mr-1"></span>OK (+30d)</span>
+          <span><span className="inline-block w-2 h-2 rounded-full bg-[#d97706] mr-1"></span>Em breve (15-30d)</span>
+          <span><span className="inline-block w-2 h-2 rounded-full bg-[#ce2b37] mr-1"></span>Urgente (&lt;15d)</span>
+        </div>
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-[#faf8f6]">
-            <tr>{["Item","Categoria","Qtd","Valor Unit.","Total","Próx. Compra"].map(h=>(
-              <th key={h} className="text-left px-4 py-3 text-xs font-bold text-[#8b6b7d] uppercase tracking-wider">{h}</th>
+            <tr>{["Item","Categoria","Qtd Atual","Valor Unit.","Total","Próx. Compra"].map(h=>(
+              <th key={h} className="text-left px-4 py-3 text-xs font-bold text-[#8b6b7d] uppercase tracking-wider whitespace-nowrap">{h}</th>
             ))}</tr>
           </thead>
           <tbody className="divide-y divide-[#f5ede8]">
-            {estoque.map((e,i)=>(
-              <tr key={i} className="hover:bg-[#faf8f6] transition-colors">
-                <td className="px-4 py-3 font-semibold">{e.item}</td>
-                <td className="px-4 py-3"><span className="bg-[#f5ede8] text-[#592343] text-xs font-semibold px-2.5 py-1 rounded-full">{e.categoria}</span></td>
-                <td className="px-4 py-3 font-bold">{e.qtd}</td>
-                <td className="px-4 py-3 text-[#8b6b7d]">{brl(e.valorUnit)}</td>
-                <td className="px-4 py-3 font-bold text-[#592343]">{brl(e.valorTotal)}</td>
-                <td className="px-4 py-3 text-xs text-[#8b6b7d]">{e.proxCompra}</td>
-              </tr>
-            ))}
+            {estoque.map((e,i)=>{
+              const dias = diasRestantes(e.proxCompra);
+              const {cor, label} = proxCompraStyle(dias);
+              return (
+                <tr key={i} className="hover:bg-[#faf8f6] transition-colors">
+                  <td className="px-4 py-3 font-semibold">{e.item}</td>
+                  <td className="px-4 py-3">
+                    {e.categoria
+                      ? <span className="bg-[#f5ede8] text-[#592343] text-xs font-semibold px-2.5 py-1 rounded-full">{e.categoria}</span>
+                      : <span className="text-[#e8ddd4]">—</span>
+                    }
+                  </td>
+                  <td className="px-4 py-3 font-bold text-center">{e.qtd}</td>
+                  <td className="px-4 py-3 text-[#8b6b7d]">{brl(e.valorUnit)}</td>
+                  <td className="px-4 py-3 font-bold text-[#592343]">{brl(e.valorTotal)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {e.proxCompra ? (
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium" style={{color:cor}}>{e.proxCompra}</span>
+                        {label && (
+                          <span className="text-xs font-bold px-1.5 py-0.5 rounded-full text-white" style={{background:cor}}>
+                            {label}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-[#e8ddd4]">—</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
             {estoque.length===0&&<tr><td colSpan={6} className="text-center text-[#8b6b7d] py-10 text-sm">Carregando...</td></tr>}
           </tbody>
         </table>
