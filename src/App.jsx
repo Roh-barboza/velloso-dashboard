@@ -819,6 +819,7 @@ async function chamarWebhookAtualizacao(pasta, familia) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        acao: "atualizar",
         pasta,
         familia,
         dataAtualizacao: new Date().toLocaleDateString("pt-BR"),
@@ -828,8 +829,26 @@ async function chamarWebhookAtualizacao(pasta, familia) {
   } catch (e) { console.error("[velloso] webhook erro:", e); }
 }
 
-/* ── PAINEL ATUALIZE FAMÍLIAS DO DIA ── */
-function PainelAtualizacoes({ processos }) {
+async function chamarWebhookEtapa(pasta, familia, novaEtapa) {
+  if (!WEBHOOK_PROCESSO_UPDATE) return;
+  try {
+    await fetch(WEBHOOK_PROCESSO_UPDATE, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        acao: "mudar_etapa",
+        pasta,
+        familia,
+        novaEtapa,
+        dataAtualizacao: new Date().toLocaleDateString("pt-BR"),
+        timestamp: new Date().toISOString(),
+      }),
+    });
+  } catch (e) { console.error("[velloso] webhook etapa erro:", e); }
+}
+
+/* ── PAINEL ATUALIZE FAMÍLIAS DO DIA (REMOVIDO - mantido apenas o helper) ── */
+function _PainelAtualizacoes_DESATIVADO({ processos }) {
   const [atualizadas, setAtualizadas] = useState([]);
 
   useEffect(() => { setAtualizadas(loadAtualizadasHoje()); }, []);
@@ -1005,9 +1024,32 @@ function PainelAtualizacoes({ processos }) {
 
 /* ── PROCESSOS com paginação ── */
 const POR_PAG = 20;
+const ETAPAS_PADRAO = [
+  "🏛️ Em tramitação judicial",
+  "🔍 Em análise",
+  "📑 Em coleta de docs",
+  "📤 Em envio",
+  "⏸️ Pendente",
+  "🎬 Iniciar gravações",
+  "✅ Concluído",
+];
+
 function TelaProcessos({processos}) {
   const [busca, setBusca] = useState("");
   const [pagina, setPagina] = useState(1);
+  const [atualizadas, setAtualizadas] = useState([]);
+  const [etapasLocal, setEtapasLocal] = useState({}); // { pasta: "nova etapa" }
+
+  useEffect(() => { setAtualizadas(loadAtualizadasHoje()); }, []);
+
+  // Lista de etapas únicas (extraídas da planilha + padrão)
+  const etapasUnicas = useMemo(() => {
+    const set = new Set(ETAPAS_PADRAO);
+    for (const p of processos) {
+      if (p.etapa && p.etapa.trim()) set.add(p.etapa.trim());
+    }
+    return Array.from(set);
+  }, [processos]);
 
   const filtered = useMemo(()=>{
     const q = busca.toLowerCase();
@@ -1026,22 +1068,48 @@ function TelaProcessos({processos}) {
   const totalPags = Math.ceil(filtered.length/POR_PAG);
   const pagAtual  = filtered.slice((pagina-1)*POR_PAG, pagina*POR_PAG);
 
-  const etapaCor = e=>{
-    if(!e) return "bg-[#f5ede8] text-[#8b6b7d]";
-    if(ehFinalizado(e)) return "bg-[#00924a]/10 text-[#00924a]";
-    if(e.toLowerCase().includes("andamento")) return "bg-[#592343]/10 text-[#592343]";
-    if(e.toLowerCase().includes("pendente")) return "bg-[#ce2b37]/10 text-[#ce2b37]";
-    return "bg-[#f5ede8] text-[#8b6b7d]";
-  };
-
   const ativos  = processos.filter(p=>!ehFinalizado(p.etapa)).length;
   const finais  = processos.filter(p=>ehFinalizado(p.etapa)).length;
 
+  // Marca/desmarca como atualizado hoje
+  function toggleAtualizado(p) {
+    const isAdding = !atualizadas.includes(p.pasta);
+    const nova = isAdding
+      ? [...atualizadas, p.pasta]
+      : atualizadas.filter(x => x !== p.pasta);
+    setAtualizadas(nova);
+    saveAtualizadasHoje(nova);
+    if (isAdding) chamarWebhookAtualizacao(p.pasta, p.familia);
+  }
+
+  // Muda a etapa do processo
+  function mudarEtapa(p, novaEtapa) {
+    setEtapasLocal(prev => ({ ...prev, [p.pasta]: novaEtapa }));
+    chamarWebhookEtapa(p.pasta, p.familia, novaEtapa);
+  }
+
+  function getEtapa(p) {
+    return etapasLocal[p.pasta] !== undefined ? etapasLocal[p.pasta] : p.etapa;
+  }
+
+  function corDias(dias) {
+    if (dias === null) return "#8b6b7d";
+    if (dias >= 30) return "#ce2b37";
+    if (dias >= 15) return "#d97706";
+    return "#00924a";
+  }
+
+  function corEtapaTexto(e) {
+    if (!e) return "#8b6b7d";
+    if (ehFinalizado(e)) return "#00924a";
+    if (e.toLowerCase().includes("andamento") || e.toLowerCase().includes("tramita")) return "#592343";
+    if (e.toLowerCase().includes("pendente")) return "#ce2b37";
+    if (e.toLowerCase().includes("analise") || e.toLowerCase().includes("análise")) return "#6b3a5d";
+    return "#592343";
+  }
+
   return(
     <div className="space-y-4">
-      {/* 🎯 Painel Inteligente de Atualizações */}
-      <PainelAtualizacoes processos={processos} />
-
       <div className="grid grid-cols-3 gap-4">
         {[
           {label:"Total",val:processos.length,cor:"#592343"},
@@ -1069,6 +1137,7 @@ function TelaProcessos({processos}) {
           <h3 className="text-lg font-bold text-[#592343]">Controle de Processos</h3>
           <div className="flex items-center gap-3">
             <span className="text-sm text-[#8b6b7d]">{filtered.length} encontrados</span>
+            {atualizadas.length>0 && <span className="text-xs font-bold text-[#00924a]">✓ {atualizadas.length} atualizadas hoje</span>}
             {totalPags>1&&<span className="text-xs text-[#8b6b7d]">pág. {pagina}/{totalPags}</span>}
           </div>
         </div>
@@ -1076,22 +1145,63 @@ function TelaProcessos({processos}) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-[#faf8f6]">
-              <tr>{["Pasta","Família","Tipo","Vendedor","Etapa","Prazo"].map(h=>(
-                <th key={h} className="text-left px-4 py-3 text-xs font-bold text-[#8b6b7d] uppercase tracking-wider">{h}</th>
+              <tr>{["Pasta","Família","Tipo","Vendedor","Etapa","Últ. Atualiz.","Dias","✓"].map(h=>(
+                <th key={h} className={`px-3 py-3 text-xs font-bold text-[#8b6b7d] uppercase tracking-wider ${h==="✓"||h==="Dias"?"text-center":"text-left"}`}>{h}</th>
               ))}</tr>
             </thead>
             <tbody className="divide-y divide-[#f5ede8]">
-              {pagAtual.map((p,i)=>(
-                <tr key={i} className={`hover:bg-[#faf8f6] transition-colors ${ehFinalizado(p.etapa)?"opacity-60":""}`}>
-                  <td className="px-4 py-3 font-mono text-xs text-[#8b6b7d]">{p.pasta}</td>
-                  <td className="px-4 py-3 font-semibold text-[#2a2a2a]">{p.familia}</td>
-                  <td className="px-4 py-3 text-[#2a2a2a]">{p.tipo}</td>
-                  <td className="px-4 py-3 text-[#2a2a2a]">{p.vendedor}</td>
-                  <td className="px-4 py-3"><span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${etapaCor(p.etapa)}`}>{p.etapa||"--"}</span></td>
-                  <td className="px-4 py-3 text-xs text-[#8b6b7d]">{p.prazo||"--"}</td>
-                </tr>
-              ))}
-              {pagAtual.length===0&&<tr><td colSpan={6} className="text-center text-[#8b6b7d] py-10 text-sm">Nenhum processo encontrado.</td></tr>}
+              {pagAtual.map((p,i)=>{
+                const etapa = getEtapa(p);
+                const dias = diasSemUpdate(p.ultimaAtt);
+                const marcado = atualizadas.includes(p.pasta);
+                const finalizado = ehFinalizado(etapa);
+                return (
+                  <tr key={i} className={`hover:bg-[#faf8f6] transition-colors ${finalizado?"opacity-60":""} ${marcado?"bg-[#00924a]/5":""}`}>
+                    <td className="px-3 py-2 font-mono text-xs text-[#8b6b7d]">{p.pasta}</td>
+                    <td className="px-3 py-2 font-semibold text-[#2a2a2a]">{p.familia}</td>
+                    <td className="px-3 py-2 text-xs text-[#2a2a2a]">{p.tipo}</td>
+                    <td className="px-3 py-2 text-xs text-[#2a2a2a]">{p.vendedor}</td>
+                    <td className="px-3 py-2">
+                      <select
+                        value={etapa || ""}
+                        onChange={e => mudarEtapa(p, e.target.value)}
+                        className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-[#faf8f6] border border-[#e8ddd4] hover:border-[#592343] focus:border-[#592343] focus:outline-none cursor-pointer transition-colors min-w-[150px]"
+                        style={{ color: corEtapaTexto(etapa) }}
+                      >
+                        <option value="">-- selecione --</option>
+                        {etapasUnicas.map(et => (
+                          <option key={et} value={et}>{et}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-3 py-2 text-xs text-[#8b6b7d] whitespace-nowrap">{p.ultimaAtt || "--"}</td>
+                    <td className="px-3 py-2 text-center whitespace-nowrap">
+                      {dias !== null ? (
+                        <span
+                          className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full text-white"
+                          style={{ background: corDias(dias) }}
+                        >
+                          {dias}d
+                        </span>
+                      ) : <span className="text-xs text-[#e8ddd4]">--</span>}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <button
+                        onClick={() => toggleAtualizado(p)}
+                        title={marcado ? "Desfazer" : "Marcar como atualizado hoje"}
+                        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                          marcado
+                            ? "bg-[#00924a] border-[#00924a] hover:scale-110"
+                            : "border-[#592343] hover:bg-[#592343]/10 hover:scale-110"
+                        }`}
+                      >
+                        {marcado && <svg width="12" height="12" fill="none" stroke="white" strokeWidth="3" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {pagAtual.length===0&&<tr><td colSpan={8} className="text-center text-[#8b6b7d] py-10 text-sm">Nenhum processo encontrado.</td></tr>}
             </tbody>
           </table>
         </div>
