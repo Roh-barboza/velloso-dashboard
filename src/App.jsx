@@ -890,6 +890,154 @@ async function chamarWebhookEtapa(pasta, familia, novaEtapa) {
   } catch (e) { console.error("[velloso] webhook etapa erro:", e); }
 }
 
+/* ── PAINEL "MINHAS ATUALIZAÇÕES" — histórico de marcações ── */
+function PainelMinhasAtualizacoes({ processos, atualizadasMap, onToggle }) {
+  const [filtro, setFiltro] = useState("hoje"); // hoje | semana | tudo
+
+  // Cria lista de marcações com nome da família
+  const lista = useMemo(() => {
+    const items = Object.entries(atualizadasMap)
+      .map(([pasta, iso]) => {
+        const proc = processos.find(p => p.pasta === pasta);
+        return {
+          pasta,
+          familia: proc?.familia || "(família não encontrada)",
+          tipo: proc?.tipo || "",
+          etapa: proc?.etapa || "",
+          dataIso: iso,
+          dt: new Date(iso),
+        };
+      })
+      .filter(x => !isNaN(x.dt))
+      .sort((a, b) => b.dt - a.dt); // mais recente primeiro
+
+    if (filtro === "hoje") {
+      const inicio = new Date(); inicio.setHours(0, 0, 0, 0);
+      return items.filter(x => x.dt >= inicio);
+    }
+    if (filtro === "semana") {
+      const inicio = new Date(Date.now() - 7 * 86400000);
+      return items.filter(x => x.dt >= inicio);
+    }
+    return items; // tudo (60 dias)
+  }, [atualizadasMap, processos, filtro]);
+
+  const totalHoje = useMemo(() => {
+    const inicio = new Date(); inicio.setHours(0, 0, 0, 0);
+    return Object.values(atualizadasMap).filter(iso => new Date(iso) >= inicio).length;
+  }, [atualizadasMap]);
+
+  function fmtHora(dt) {
+    return dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  }
+  function fmtDia(dt) {
+    const hoje = new Date(); hoje.setHours(0,0,0,0);
+    const ontem = new Date(hoje.getTime() - 86400000);
+    const d = new Date(dt); d.setHours(0,0,0,0);
+    if (d.getTime() === hoje.getTime()) return "Hoje";
+    if (d.getTime() === ontem.getTime()) return "Ontem";
+    return dt.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+  }
+
+  return (
+    <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-[#e8ddd4]">
+      {/* Header */}
+      <div className="p-5" style={{ background: "linear-gradient(135deg,#00924a 0%,#16a34a 100%)" }}>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <div className="flex items-center gap-2.5 mb-1">
+              <span className="text-2xl">📝</span>
+              <h3 className="text-lg md:text-xl font-bold text-white">Minhas Atualizações</h3>
+            </div>
+            <p className="text-white/85 text-xs">
+              {totalHoje > 0
+                ? <><strong className="text-white">{totalHoje}</strong> família(s) atualizada(s) hoje</>
+                : "Nenhuma família atualizada ainda hoje"
+              }
+            </p>
+          </div>
+          {/* Filtros */}
+          <div className="flex gap-1 bg-white/20 rounded-lg p-1">
+            {[
+              { key: "hoje", label: "Hoje" },
+              { key: "semana", label: "7 dias" },
+              { key: "tudo", label: "Tudo" },
+            ].map(f => (
+              <button
+                key={f.key}
+                onClick={() => setFiltro(f.key)}
+                className={`text-[11px] font-semibold px-3 py-1 rounded-md transition-all ${
+                  filtro === f.key
+                    ? "bg-white text-[#00924a]"
+                    : "text-white/80 hover:text-white hover:bg-white/10"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Lista */}
+      <div className="p-3 md:p-4 space-y-2 max-h-[400px] overflow-y-auto">
+        {lista.length === 0 && (
+          <div className="text-center py-8">
+            <div className="text-4xl mb-2">📋</div>
+            <p className="text-sm font-bold text-[#592343]">
+              {filtro === "hoje" ? "Nenhuma atualização hoje" : "Nenhuma atualização no período"}
+            </p>
+            <p className="text-xs text-[#8b6b7d] mt-1">
+              Marque uma família como atualizada para registrar aqui
+            </p>
+          </div>
+        )}
+        {lista.map((x, i) => (
+          <div
+            key={x.pasta + "-" + i}
+            className="flex items-center gap-3 p-3 rounded-xl bg-[#f0fdf4] border border-[#86efac]/40 hover:bg-[#dcfce7] transition-all"
+          >
+            {/* Check verde */}
+            <div className="w-7 h-7 rounded-full bg-[#00924a] flex items-center justify-center flex-shrink-0">
+              <svg width="14" height="14" fill="none" stroke="white" strokeWidth="3" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+
+            {/* Conteúdo */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-[#2a2a2a] text-sm">{x.familia}</span>
+                <span className="font-mono text-[10px] text-[#8b6b7d] bg-white px-1.5 py-0.5 rounded border border-[#e8ddd4]">#{x.pasta}</span>
+              </div>
+              {(x.tipo || x.etapa) && (
+                <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-[#6b7280] flex-wrap">
+                  {x.tipo && <span>{x.tipo}</span>}
+                  {x.tipo && x.etapa && <span>·</span>}
+                  {x.etapa && <span className="text-[#592343] font-medium">{x.etapa}</span>}
+                </div>
+              )}
+            </div>
+
+            {/* Data e hora */}
+            <div className="text-right flex-shrink-0">
+              <div className="text-[11px] font-bold text-[#00924a] uppercase tracking-wider">{fmtDia(x.dt)}</div>
+              <div className="text-[10px] text-[#16a34a]">{fmtHora(x.dt)}</div>
+            </div>
+
+            {/* Botão desfazer */}
+            <button
+              onClick={() => onToggle({ pasta: x.pasta, familia: x.familia })}
+              title="Desfazer marcação"
+              className="text-[#8b6b7d] hover:text-[#ce2b37] transition-colors p-1"
+            >
+              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ── PAINEL DE TAREFAS — Top 15 famílias mais críticas ── */
 function PainelTarefas({ processos, atualizadasMap, onToggle }) {
   // Calcula críticas: processos não finalizados, dias sem update >= 15 (ou sem registro)
@@ -1280,8 +1428,11 @@ function TelaProcessos({processos}) {
 
   return(
     <div className="space-y-4">
-      {/* 📋 Painel de Tarefas — Top 15 famílias mais críticas */}
-      <PainelTarefas processos={processos} atualizadasMap={atualizadasMap} onToggle={toggleAtualizado} />
+      {/* 📋 Painéis de Tarefas e Histórico de Atualizações */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <PainelTarefas processos={processos} atualizadasMap={atualizadasMap} onToggle={toggleAtualizado} />
+        <PainelMinhasAtualizacoes processos={processos} atualizadasMap={atualizadasMap} onToggle={toggleAtualizado} />
+      </div>
 
       <div className="grid grid-cols-3 gap-4">
         {[
@@ -1360,7 +1511,11 @@ function TelaProcessos({processos}) {
                     <td className="px-3 py-2 text-center">
                       <button
                         onClick={() => toggleAtualizado(p)}
-                        title={marcado ? "Desfazer" : "Marcar como atualizado hoje"}
+                        title={
+                          marcado
+                            ? `✓ Atualizado em ${new Date(atualizadasMap[p.pasta]).toLocaleString("pt-BR")} — clique para desfazer`
+                            : "Marcar como atualizado agora"
+                        }
                         className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
                           marcado
                             ? "bg-[#00924a] border-[#00924a] hover:scale-110"
