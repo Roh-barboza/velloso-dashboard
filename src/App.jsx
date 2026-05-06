@@ -1,17 +1,31 @@
 import { useEffect, useMemo, useState } from "react";
 
 function parseCsv(text) {
-  const lines = text.replace(/^\uFEFF/, "").split("\n").map(l => l.trim()).filter(Boolean);
-  return lines.map(line => {
-    const cols = []; let cur = "", inQ = false;
-    for (let i = 0; i < line.length; i++) {
-      const c = line[i];
-      if (c === '"') { inQ = !inQ; continue; }
-      if (c === "," && !inQ) { cols.push(cur.trim()); cur = ""; continue; }
-      cur += c;
+  // Parser CSV robusto \u2014 suporta v\u00EDrgulas, aspas e newlines dentro de c\u00E9lulas
+  const t = text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const rows = [];
+  let row = [], cur = "", inQ = false;
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (inQ) {
+      if (c === '"') {
+        if (t[i + 1] === '"') { cur += '"'; i++; } // aspas escapadas ("")
+        else inQ = false;
+      } else {
+        cur += c; // mant\u00E9m qualquer caractere dentro das aspas (inclui \n)
+      }
+    } else {
+      if (c === '"') inQ = true;
+      else if (c === ",") { row.push(cur); cur = ""; }
+      else if (c === "\n") { row.push(cur); rows.push(row); row = []; cur = ""; }
+      else cur += c;
     }
-    cols.push(cur.trim()); return cols;
-  });
+  }
+  if (cur.length > 0 || row.length > 0) { row.push(cur); rows.push(row); }
+  // Trim c\u00E9lulas e remove linhas totalmente vazias
+  return rows
+    .map(r => r.map(x => (x || "").trim()))
+    .filter(r => r.some(x => x));
 }
 function brl(val) {
   const n = parseFloat(String(val).replace(/[^0-9,.-]/g,"").replace(",","."));
@@ -67,7 +81,12 @@ function parseVendas(text) {
   return { vendas:data, total, totalConfirmado, totalPrevisao, mix };
 }
 function normStr(s) {
-  return (s||"").normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase().trim();
+  return (s||"")
+    .replace(/\s+/g, " ")          // quebras de linha e tabs viram espaço
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu,"")
+    .toLowerCase()
+    .trim();
 }
 function parseEstoque(text) {
   const rows = parseCsv(text);
@@ -117,54 +136,67 @@ function parseProcessos(text) {
   const rows = parseCsv(text);
   if (!rows.length) return [];
 
-  // Encontra a linha de cabeçalho (primeiras 5 linhas que tenham "PASTA" e "FAMILIA")
+  // Encontra a linha de cabeçalho — procura nas primeiras 6 linhas a que tem "pasta" e "familia"
   let hIdx = -1;
   for (let i = 0; i < Math.min(rows.length, 6); i++) {
-    const linha = rows[i].map(normStr).join("|");
+    const linha = (rows[i] || []).map(normStr).join("|");
     if (linha.includes("pasta") && linha.includes("familia")) { hIdx = i; break; }
   }
-  if (hIdx < 0) hIdx = 2; // fallback
+  if (hIdx < 0) hIdx = 1; // fallback p/ linha 2
 
   const h = rows[hIdx] || [];
+  // idx procura cabeçalho que CONTÉM o termo (após normalizar acentos e remover quebras)
   const idx = (...keys) => {
     for (const k of keys) {
-      const i = h.findIndex(x => normStr(x).includes(normStr(k)));
+      const target = normStr(k);
+      const i = h.findIndex(x => normStr(x) === target);
+      if (i >= 0) return i;
+    }
+    // segunda tentativa: contém
+    for (const k of keys) {
+      const target = normStr(k);
+      const i = h.findIndex(x => normStr(x).includes(target));
       if (i >= 0) return i;
     }
     return -1;
   };
 
-  const iPasta  = idx("n pasta", "pasta");
+  const iPasta  = idx("n pasta", "no pasta", "pasta");
   const iFam    = idx("familia", "nome");
   const iTipo   = idx("tipo de servico", "tipo de serv", "servico", "tipo");
   const iVend   = idx("vendedor");
   const iResp   = idx("responsavel", "resp");
   const iEtapa  = idx("etapa atual", "etapa", "status");
   const iPrazo  = idx("prazo");
-  const iTotal  = idx("total", "valor");
+  const iTotalC = idx("total contrato", "valor contrato");
   const iDataC  = idx("data contrato", "data do contrato");
-  const iUltAtt = idx("ultima atualizacao", "ult atualizacao", "ult. atualizacao", "ultima att", "ult att");
-  const iUltCtt = idx("ultimo contato", "ult contato", "ult. contato");
+  const iUltAtt = idx("ult atualizacao", "ultima atualizacao", "ult. atualizacao", "ultima att", "ult att");
+  const iUltCtt = idx("ult contato cliente", "ultimo contato", "ult contato", "ult. contato");
 
   const result = [];
   for (let i = hIdx + 1; i < rows.length; i++) {
     const r = rows[i] || [];
-    const pasta = (iPasta >= 0 ? r[iPasta] : r[0]) || "";
-    const familia = (iFam >= 0 ? r[iFam] : r[1]) || "";
-    if (!pasta.trim() || !familia.trim()) continue;
+    const pasta = ((iPasta >= 0 ? r[iPasta] : r[0]) || "").trim();
+    const familia = ((iFam >= 0 ? r[iFam] : r[1]) || "").trim();
+    // Aceita linhas com pasta numérica E família preenchida
+    if (!pasta || !familia) continue;
+    // Pula a linha de título (que pode conter "VELLOSO")
     if (normStr(pasta).includes("velloso") || normStr(familia).includes("velloso")) continue;
+    // Pula linha de cabeçalho duplicada
+    if (normStr(pasta) === "pasta" || normStr(pasta) === "n pasta" || normStr(pasta) === "no pasta") continue;
+
     result.push({
-      pasta:        pasta.trim(),
-      familia:      familia.trim(),
-      tipo:         (iTipo  >= 0 ? r[iTipo]  : r[2]) || "",
-      vendedor:     (iVend  >= 0 ? r[iVend]  : r[3]) || "",
-      responsavel:  (iResp  >= 0 ? r[iResp]  : r[4]) || "",
-      etapa:        (iEtapa >= 0 ? r[iEtapa] : r[5]) || "",
-      prazo:        (iPrazo >= 0 ? r[iPrazo] : r[6]) || "",
-      total:        (iTotal >= 0 ? r[iTotal] : r[7]) || "0",
-      dataContrato: iDataC  >= 0 ? (r[iDataC]  || "") : "",
-      ultimaAtt:    iUltAtt >= 0 ? (r[iUltAtt] || "") : "",
-      ultimoContato:iUltCtt >= 0 ? (r[iUltCtt] || "") : "",
+      pasta,
+      familia,
+      tipo:         ((iTipo  >= 0 ? r[iTipo]  : r[2]) || "").trim(),
+      vendedor:     ((iVend  >= 0 ? r[iVend]  : r[3]) || "").trim(),
+      responsavel:  ((iResp  >= 0 ? r[iResp]  : r[4]) || "").trim(),
+      etapa:        ((iEtapa >= 0 ? r[iEtapa] : r[5]) || "").trim(),
+      prazo:        ((iPrazo >= 0 ? r[iPrazo] : r[6]) || "").trim(),
+      total:        ((iTotalC>= 0 ? r[iTotalC]: r[7]) || "0").trim(),
+      dataContrato: iDataC  >= 0 ? (r[iDataC]  || "").trim() : "",
+      ultimaAtt:    iUltAtt >= 0 ? (r[iUltAtt] || "").trim() : "",
+      ultimoContato:iUltCtt >= 0 ? (r[iUltCtt] || "").trim() : "",
     });
   }
   return result;
