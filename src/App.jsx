@@ -114,14 +114,60 @@ function parseCalendario(text) {
   return result;
 }
 function parseProcessos(text) {
-  const rows = parseCsv(text); const result = [];
-  for (let i=3;i<rows.length;i++) {
-    const r=rows[i];
-    if(!r[0]||r[0].includes("VELLOSO")||!r[1]) continue;
-    if(r.every(c=>!c)) continue;
-    result.push({pasta:r[0],familia:r[1],tipo:r[2]||"",vendedor:r[3]||"",responsavel:r[4]||"",etapa:r[5]||"",prazo:r[6]||"",total:r[7]||"0"});
+  const rows = parseCsv(text);
+  if (!rows.length) return [];
+
+  // Encontra a linha de cabeçalho (primeiras 5 linhas que tenham "PASTA" e "FAMILIA")
+  let hIdx = -1;
+  for (let i = 0; i < Math.min(rows.length, 6); i++) {
+    const linha = rows[i].map(normStr).join("|");
+    if (linha.includes("pasta") && linha.includes("familia")) { hIdx = i; break; }
   }
-  return result.filter(p=>p.pasta&&p.familia);
+  if (hIdx < 0) hIdx = 2; // fallback
+
+  const h = rows[hIdx] || [];
+  const idx = (...keys) => {
+    for (const k of keys) {
+      const i = h.findIndex(x => normStr(x).includes(normStr(k)));
+      if (i >= 0) return i;
+    }
+    return -1;
+  };
+
+  const iPasta  = idx("n pasta", "pasta");
+  const iFam    = idx("familia", "nome");
+  const iTipo   = idx("tipo de servico", "tipo de serv", "servico", "tipo");
+  const iVend   = idx("vendedor");
+  const iResp   = idx("responsavel", "resp");
+  const iEtapa  = idx("etapa atual", "etapa", "status");
+  const iPrazo  = idx("prazo");
+  const iTotal  = idx("total", "valor");
+  const iDataC  = idx("data contrato", "data do contrato");
+  const iUltAtt = idx("ultima atualizacao", "ult atualizacao", "ult. atualizacao", "ultima att", "ult att");
+  const iUltCtt = idx("ultimo contato", "ult contato", "ult. contato");
+
+  const result = [];
+  for (let i = hIdx + 1; i < rows.length; i++) {
+    const r = rows[i] || [];
+    const pasta = (iPasta >= 0 ? r[iPasta] : r[0]) || "";
+    const familia = (iFam >= 0 ? r[iFam] : r[1]) || "";
+    if (!pasta.trim() || !familia.trim()) continue;
+    if (normStr(pasta).includes("velloso") || normStr(familia).includes("velloso")) continue;
+    result.push({
+      pasta:        pasta.trim(),
+      familia:      familia.trim(),
+      tipo:         (iTipo  >= 0 ? r[iTipo]  : r[2]) || "",
+      vendedor:     (iVend  >= 0 ? r[iVend]  : r[3]) || "",
+      responsavel:  (iResp  >= 0 ? r[iResp]  : r[4]) || "",
+      etapa:        (iEtapa >= 0 ? r[iEtapa] : r[5]) || "",
+      prazo:        (iPrazo >= 0 ? r[iPrazo] : r[6]) || "",
+      total:        (iTotal >= 0 ? r[iTotal] : r[7]) || "0",
+      dataContrato: iDataC  >= 0 ? (r[iDataC]  || "") : "",
+      ultimaAtt:    iUltAtt >= 0 ? (r[iUltAtt] || "") : "",
+      ultimoContato:iUltCtt >= 0 ? (r[iUltCtt] || "") : "",
+    });
+  }
+  return result;
 }
 
 const WEEKDAYS_DISPLAY = ["SEG","TER","QUA","QUI","SEX","SÁB","DOM"];
@@ -725,6 +771,238 @@ function TelaVendas({vendas}) {
   );
 }
 
+/* ── ATUALIZAÇÕES DE PROCESSOS (Painel Inteligente) ── */
+// Configure aqui a URL do webhook do n8n para sincronizar com a planilha
+const WEBHOOK_PROCESSO_UPDATE = ""; // ex: "https://chaoticcow-n8n.cloudfy.live/webhook/atualizar-processo"
+
+const DIAS_LIMITE_URGENCIA = 15; // a partir de X dias sem update, vira "para atualizar"
+
+function diasSemUpdate(dataStr) {
+  if (!dataStr) return null;
+  const partes = dataStr.trim().split(/[\/\-]/);
+  if (partes.length !== 3) return null;
+  let [d, m, y] = partes;
+  if (y.length === 2) y = "20" + y;
+  const dt = new Date(+y, +m - 1, +d);
+  if (isNaN(dt)) return null;
+  return Math.max(0, Math.floor((new Date() - dt) / 86400000));
+}
+
+function hojeKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+
+function loadAtualizadasHoje() {
+  try {
+    const raw = JSON.parse(localStorage.getItem("velloso_atualizadas") || "{}");
+    return raw[hojeKey()] || [];
+  } catch { return []; }
+}
+
+function saveAtualizadasHoje(lista) {
+  try {
+    const raw = JSON.parse(localStorage.getItem("velloso_atualizadas") || "{}");
+    // limpa registros antigos (>7 dias)
+    const limit = new Date(Date.now() - 7 * 86400000);
+    const limitKey = `${limit.getFullYear()}-${String(limit.getMonth()+1).padStart(2,"0")}-${String(limit.getDate()).padStart(2,"0")}`;
+    for (const k of Object.keys(raw)) if (k < limitKey) delete raw[k];
+    raw[hojeKey()] = lista;
+    localStorage.setItem("velloso_atualizadas", JSON.stringify(raw));
+  } catch {}
+}
+
+async function chamarWebhookAtualizacao(pasta, familia) {
+  if (!WEBHOOK_PROCESSO_UPDATE) return; // não configurado, ignora
+  try {
+    await fetch(WEBHOOK_PROCESSO_UPDATE, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pasta,
+        familia,
+        dataAtualizacao: new Date().toLocaleDateString("pt-BR"),
+        timestamp: new Date().toISOString(),
+      }),
+    });
+  } catch (e) { console.error("[velloso] webhook erro:", e); }
+}
+
+/* ── PAINEL ATUALIZE FAMÍLIAS DO DIA ── */
+function PainelAtualizacoes({ processos }) {
+  const [atualizadas, setAtualizadas] = useState([]);
+
+  useEffect(() => { setAtualizadas(loadAtualizadasHoje()); }, []);
+
+  const urgentes = useMemo(() => {
+    return processos
+      .filter(p => !ehFinalizado(p.etapa))
+      .map(p => ({
+        ...p,
+        dias: diasSemUpdate(p.ultimaAtt),
+      }))
+      .filter(p => p.dias === null || p.dias >= DIAS_LIMITE_URGENCIA)
+      .sort((a, b) => {
+        // null (sem registro) por último, depois mais dias = mais urgente
+        if (a.dias === null && b.dias === null) return 0;
+        if (a.dias === null) return 1;
+        if (b.dias === null) return -1;
+        return b.dias - a.dias;
+      });
+  }, [processos]);
+
+  const pendentes = urgentes.filter(p => !atualizadas.includes(p.pasta));
+  const concluidasHoje = urgentes.filter(p => atualizadas.includes(p.pasta));
+  const total = urgentes.length;
+  const pct = total > 0 ? Math.round((concluidasHoje.length / total) * 100) : 100;
+
+  function toggleAtualizado(p) {
+    const isAdding = !atualizadas.includes(p.pasta);
+    const nova = isAdding
+      ? [...atualizadas, p.pasta]
+      : atualizadas.filter(x => x !== p.pasta);
+    setAtualizadas(nova);
+    saveAtualizadasHoje(nova);
+    if (isAdding) chamarWebhookAtualizacao(p.pasta, p.familia);
+  }
+
+  function corDias(dias) {
+    if (dias === null) return { bg: "#8b6b7d", label: "Sem registro" };
+    if (dias >= 60) return { bg: "#ce2b37", label: `${dias} dias` };
+    if (dias >= 30) return { bg: "#d97706", label: `${dias} dias` };
+    return { bg: "#592343", label: `${dias} dias` };
+  }
+
+  return (
+    <div className="bg-white rounded-2xl shadow-lg overflow-hidden mb-6 border border-[#e8ddd4]">
+      {/* Header com gradiente */}
+      <div className="p-6 relative overflow-hidden" style={{ background: "linear-gradient(135deg,#592343 0%,#6b3a5d 50%,#8b3a6d 100%)" }}>
+        {/* Decoração */}
+        <div className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-10" style={{ background: "white", transform: "translate(40%,-40%)" }} />
+        <div className="absolute bottom-0 left-0 w-48 h-48 rounded-full opacity-5" style={{ background: "white", transform: "translate(-30%,30%)" }} />
+
+        <div className="relative flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <span className="text-3xl">🎯</span>
+              <h3 className="text-xl md:text-2xl font-bold text-white">Atualize as Famílias do Dia</h3>
+            </div>
+            <p className="text-white/80 text-sm">
+              {total === 0
+                ? "✨ Nenhuma família precisa de atualização hoje"
+                : (
+                  <>
+                    <strong className="text-white">{pendentes.length}</strong> pendente{pendentes.length !== 1 ? "s" : ""}
+                    {" · "}
+                    <strong className="text-white">{concluidasHoje.length}</strong> atualizada{concluidasHoje.length !== 1 ? "s" : ""} hoje
+                  </>
+                )
+              }
+            </p>
+          </div>
+          {total > 0 && (
+            <div className="text-right">
+              <div className="text-4xl font-bold text-white leading-none">{pct}%</div>
+              <div className="text-[10px] text-white/70 uppercase tracking-widest mt-1">do dia</div>
+            </div>
+          )}
+        </div>
+
+        {total > 0 && (
+          <div className="relative w-full bg-white/15 rounded-full h-2 mt-5 overflow-hidden">
+            <div
+              className="h-2 rounded-full transition-all duration-500"
+              style={{ width: `${pct}%`, background: "linear-gradient(90deg,#10b981,#34d399)" }}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Lista */}
+      <div className="p-4 md:p-5 space-y-2 max-h-[640px] overflow-y-auto">
+        {total === 0 && (
+          <div className="text-center py-12">
+            <div className="text-7xl mb-3">🎉</div>
+            <p className="text-xl font-bold text-[#592343]">Tudo em dia!</p>
+            <p className="text-sm text-[#8b6b7d] mt-1">Nenhum processo precisa de atualização agora</p>
+          </div>
+        )}
+
+        {/* Pendentes */}
+        {pendentes.map((p, i) => {
+          const c = corDias(p.dias);
+          return (
+            <button
+              key={p.pasta + "-" + i}
+              onClick={() => toggleAtualizado(p)}
+              className="group w-full flex items-center gap-4 p-4 rounded-xl border-2 border-[#e8ddd4] hover:border-[#592343] hover:shadow-md hover:bg-[#faf8f6] transition-all text-left"
+            >
+              {/* Checkbox */}
+              <div className="w-7 h-7 rounded-full border-2 border-[#592343] flex items-center justify-center flex-shrink-0 group-hover:bg-[#592343]/10 transition-all">
+                <div className="w-3 h-3 rounded-full bg-[#592343] opacity-0 group-hover:opacity-30 transition-opacity"/>
+              </div>
+
+              {/* Conteúdo */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-[#2a2a2a] text-base">{p.familia}</span>
+                  <span className="font-mono text-[10px] text-[#8b6b7d] bg-[#f5ede8] px-1.5 py-0.5 rounded">#{p.pasta}</span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-1 text-xs text-[#8b6b7d] flex-wrap">
+                  {p.tipo && <span className="font-medium">{p.tipo}</span>}
+                  {p.tipo && p.etapa && <span>·</span>}
+                  {p.etapa && <span className="text-[#592343] font-medium">{p.etapa}</span>}
+                  {p.responsavel && <><span>·</span><span>{p.responsavel}</span></>}
+                </div>
+                {p.ultimaAtt && (
+                  <p className="text-[10px] text-[#8b6b7d] mt-1">Última atualização: <span className="font-medium">{p.ultimaAtt}</span></p>
+                )}
+              </div>
+
+              {/* Badge de dias */}
+              <div className="flex flex-col items-end flex-shrink-0">
+                <span
+                  className="text-[10px] font-bold uppercase px-2.5 py-1 rounded-full text-white whitespace-nowrap tracking-wider"
+                  style={{ background: c.bg, boxShadow: `0 2px 8px ${c.bg}40` }}
+                >
+                  {c.label}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+
+        {/* Concluídas hoje */}
+        {concluidasHoje.length > 0 && (
+          <div className="pt-5 mt-3 border-t border-[#e8ddd4]">
+            <p className="text-[10px] uppercase font-bold text-[#00924a] tracking-widest mb-3 flex items-center gap-1.5">
+              <span>✓</span>
+              <span>Atualizadas hoje ({concluidasHoje.length})</span>
+            </p>
+            {concluidasHoje.map((p, i) => (
+              <button
+                key={"done-"+p.pasta+"-"+i}
+                onClick={() => toggleAtualizado(p)}
+                className="w-full flex items-center gap-4 p-3 rounded-xl bg-[#00924a]/5 border border-[#00924a]/20 mb-2 transition-all text-left opacity-70 hover:opacity-100 hover:bg-[#00924a]/10"
+                title="Clique para desfazer"
+              >
+                <div className="w-7 h-7 rounded-full bg-[#00924a] flex items-center justify-center flex-shrink-0">
+                  <svg width="14" height="14" fill="none" stroke="white" strokeWidth="3" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="font-semibold text-[#2a2a2a] line-through text-sm">{p.familia}</span>
+                  <span className="font-mono text-[10px] text-[#8b6b7d] ml-2">#{p.pasta}</span>
+                </div>
+                <span className="text-[11px] text-[#00924a] font-bold uppercase tracking-wider">✓ Atualizado</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ── PROCESSOS com paginação ── */
 const POR_PAG = 20;
 function TelaProcessos({processos}) {
@@ -761,6 +1039,9 @@ function TelaProcessos({processos}) {
 
   return(
     <div className="space-y-4">
+      {/* 🎯 Painel Inteligente de Atualizações */}
+      <PainelAtualizacoes processos={processos} />
+
       <div className="grid grid-cols-3 gap-4">
         {[
           {label:"Total",val:processos.length,cor:"#592343"},
