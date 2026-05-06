@@ -28,14 +28,31 @@ const U_CALENDARIO = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSDxyW-yoO
 const U_PROCESSOS  = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSLRDqgcYE4QpXZ3WeGzr5nDeeEVvIDPOVmTdshA0lZEGZA9m3PZSVRBZh30_sROKFJFd4Ll3l-Ar_v/pub?output=csv";
 
 function parseVendas(text) {
-  const rows = parseCsv(text); const data = []; let total = 0;
-  for (let i = 4; i < rows.length; i++) {
+  const rows = parseCsv(text);
+  const data = [];
+  let total = 0, totalConfirmado = 0, totalPrevisao = 0;
+  for (let i = 3; i < rows.length; i++) {
     const r = rows[i];
     if (!r[1] || r[1].match(/^\d+$/) || !r[3]) continue;
+    // pula linha de cabeçalho "Cliente"
+    if (normStr(r[1]) === "cliente") continue;
     const valor = parseFloat(String(r[3]).replace(/[^0-9,]/g,"").replace(",",".")) || 0;
     if (valor === 0) continue;
-    data.push({ vendedor:r[0]||"", cliente:r[1], servico:r[2]||"Servico", valor });
+    // Coluna E (status): se contém "falta", "pendente" ou "assinar" → pendente
+    const statusRaw = (r[4] || "").trim();
+    const statusN = normStr(statusRaw);
+    const pendente = statusN.includes("falta") || statusN.includes("pendente") || statusN.includes("assinar") || statusN.includes("aguard");
+    data.push({
+      vendedor: r[0]||"",
+      cliente: r[1],
+      servico: r[2]||"Servico",
+      valor,
+      pendente,
+      status: statusRaw || (pendente ? "Pendente" : "Confirmado"),
+    });
     total += valor;
+    if (pendente) totalPrevisao += valor;
+    else          totalConfirmado += valor;
   }
   const mix = {};
   for (const d of data) {
@@ -47,7 +64,7 @@ function parseVendas(text) {
     else if (s.includes("apostila")) t="Apostila";
     mix[t] = (mix[t]||0)+d.valor;
   }
-  return { vendas:data, total, mix };
+  return { vendas:data, total, totalConfirmado, totalPrevisao, mix };
 }
 function normStr(s) {
   return (s||"").normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase().trim();
@@ -261,7 +278,7 @@ function TelaInicio({eventos, vendas, processos}) {
         {[
           {titulo:"Hoje",valor:agora.toLocaleDateString("pt-BR"),sub:MONTHS_DISPLAY[agora.getMonth()]+" "+agora.getFullYear(),cor:"#592343"},
           {titulo:"Eventos hoje",valor:String(eventosHoje.length),sub:"Aniversários e compromissos",cor:"#ce2b37"},
-          {titulo:"Vendas do mês",valor:brl(vendas?.total||0),sub:`${vendas?.vendas?.length||0} contratos`,cor:"#8b6b7d"},
+          {titulo:"Vendas do mês",valor:brl(vendas?.totalConfirmado||0),sub:`✓ ${(vendas?.vendas||[]).filter(v=>!v.pendente).length} confirmados · ⏳ ${(vendas?.vendas||[]).filter(v=>v.pendente).length} pendentes`,cor:"#00924a"},
           {titulo:"Processos ativos",valor:String(ativos),sub:`${processos.length} no total`,cor:"#00924a"},
         ].map(c=>(
           <div key={c.titulo} className="rounded-xl bg-white p-5 shadow border-l-4" style={{borderLeftColor:c.cor}}>
@@ -471,21 +488,71 @@ function TelaVendas({vendas}) {
   const maxVend = ranking.length > 0 ? ranking[0][1].total : 1;
   const totalReal = vendas?.total || 0;
 
+  const pendentes = (vendas?.vendas||[]).filter(v=>v.pendente).length;
+
   return(
     <div className="space-y-6">
-      {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {[
-          {label:"Total do Mês",  val:brl(vendas?.total||0),                                               cor:"border-[#592343]"},
-          {label:"Contratos",     val:vendas?.vendas?.length||0,                                            cor:"border-[#8b6b7d]"},
-          {label:"Ticket Médio",  val:brl(vendas?.vendas?.length?(vendas.total/vendas.vendas.length):0),   cor:"border-[#ce2b37]"},
-        ].map(c=>(
-          <div key={c.label} className={`bg-white rounded-xl shadow p-5 border-l-4 ${c.cor}`}>
-            <p className="text-xs text-[#8b6b7d] uppercase font-semibold tracking-wider">{c.label}</p>
-            <p className="text-2xl font-bold text-[#592343] mt-1">{c.val}</p>
+      {/* KPIs principais — Confirmado vs Previsão */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white rounded-xl shadow p-5 border-l-4 border-[#00924a]">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-lg">✓</span>
+            <p className="text-xs text-[#8b6b7d] uppercase font-semibold tracking-wider">Confirmado (Assinado)</p>
           </div>
-        ))}
+          <p className="text-2xl font-bold text-[#00924a] mt-1">{brl(vendas?.totalConfirmado||0)}</p>
+          <p className="text-xs text-[#8b6b7d] mt-1">{(vendas?.vendas||[]).filter(v=>!v.pendente).length} contrato(s) já assinados</p>
+        </div>
+        <div className="bg-white rounded-xl shadow p-5 border-l-4 border-[#d97706]">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-lg">⏳</span>
+            <p className="text-xs text-[#8b6b7d] uppercase font-semibold tracking-wider">Aguardando Assinatura</p>
+          </div>
+          <p className="text-2xl font-bold text-[#d97706] mt-1">{brl(vendas?.totalPrevisao||0)}</p>
+          <p className="text-xs text-[#8b6b7d] mt-1">{pendentes} contrato(s) pendente(s)</p>
+        </div>
+        <div className="bg-white rounded-xl shadow p-5 border-l-4 border-[#592343]" style={{background:"linear-gradient(135deg,#fff 0%,#faf0f6 100%)"}}>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-lg">📈</span>
+            <p className="text-xs text-[#8b6b7d] uppercase font-semibold tracking-wider">Previsão Total do Mês</p>
+          </div>
+          <p className="text-2xl font-bold text-[#592343] mt-1">{brl(vendas?.total||0)}</p>
+          <p className="text-xs text-[#8b6b7d] mt-1">{vendas?.vendas?.length||0} contrato(s) · ticket médio {brl(vendas?.vendas?.length?(vendas.total/vendas.vendas.length):0)}</p>
+        </div>
       </div>
+
+      {/* Barra de progresso: confirmado vs previsão */}
+      {(vendas?.total||0) > 0 && (
+        <div className="bg-white rounded-xl shadow p-5">
+          <div className="flex justify-between items-center mb-2">
+            <p className="text-sm font-semibold text-[#592343]">Progresso da Previsão</p>
+            <p className="text-xs text-[#8b6b7d]">
+              {Math.round(((vendas?.totalConfirmado||0)/(vendas?.total||1))*100)}% confirmado
+            </p>
+          </div>
+          <div className="w-full bg-[#f5ede8] rounded-full h-3 overflow-hidden flex">
+            <div
+              className="h-3 bg-[#00924a] transition-all"
+              style={{width:`${((vendas?.totalConfirmado||0)/(vendas?.total||1))*100}%`}}
+              title={`Confirmado: ${brl(vendas?.totalConfirmado||0)}`}
+            />
+            <div
+              className="h-3 bg-[#d97706] transition-all"
+              style={{width:`${((vendas?.totalPrevisao||0)/(vendas?.total||1))*100}%`}}
+              title={`Aguardando: ${brl(vendas?.totalPrevisao||0)}`}
+            />
+          </div>
+          <div className="flex gap-4 mt-2 text-xs">
+            <div className="flex items-center gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-[#00924a]"/>
+              <span className="text-[#8b6b7d]">Confirmado: <strong className="text-[#00924a]">{brl(vendas?.totalConfirmado||0)}</strong></span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-[#d97706]"/>
+              <span className="text-[#8b6b7d]">Aguardando: <strong className="text-[#d97706]">{brl(vendas?.totalPrevisao||0)}</strong></span>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Contratos do Mês */}
@@ -493,15 +560,28 @@ function TelaVendas({vendas}) {
           <h3 className="text-xl font-bold text-[#592343] mb-2">Contratos do Mês</h3>
           <div className="border-t-2 border-[#592343] pt-4 space-y-2 max-h-96 overflow-y-auto">
             {(vendas?.vendas||[]).map((v,i)=>(
-              <div key={i} className="flex items-center gap-3 py-2 border-b border-[#f5ede8] last:border-0">
-                <div className="w-8 h-8 rounded-full bg-[#592343] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+              <div
+                key={i}
+                className={`flex items-center gap-3 py-2 px-2 rounded-lg border-b border-[#f5ede8] last:border-0 ${v.pendente ? "bg-[#fff7ed]" : ""}`}
+                title={v.pendente ? "Aguardando assinatura" : "Confirmado"}
+              >
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0 ${v.pendente ? "bg-[#d97706]" : "bg-[#00924a]"}`}>
                   {v.cliente.charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm truncate">{v.cliente}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-sm truncate">{v.cliente}</p>
+                    {v.pendente && (
+                      <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-[#d97706]/15 text-[#d97706] whitespace-nowrap">
+                        ⏳ Falta assinar
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-[#8b6b7d] truncate">{v.servico}</p>
                 </div>
-                <p className="font-bold text-[#592343] text-sm whitespace-nowrap">{brl(v.valor)}</p>
+                <p className={`font-bold text-sm whitespace-nowrap ${v.pendente ? "text-[#d97706]" : "text-[#00924a]"}`}>
+                  {brl(v.valor)}
+                </p>
               </div>
             ))}
             {!vendas&&<p className="text-[#8b6b7d] text-center py-8 text-sm">Carregando...</p>}
