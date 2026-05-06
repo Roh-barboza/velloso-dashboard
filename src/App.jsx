@@ -820,28 +820,39 @@ function diasSemUpdate(dataStr) {
   return Math.max(0, Math.floor((new Date() - dt) / 86400000));
 }
 
-function hojeKey() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+// Carrega o mapa { pasta: ISOdate } de atualizações locais
+function loadAtualizadasMap() {
+  try {
+    const raw = JSON.parse(localStorage.getItem("velloso_atualizadas_v2") || "{}");
+    // Limpa registros antigos (mais de 60 dias)
+    const limit = Date.now() - 60 * 86400000;
+    const clean = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (new Date(v).getTime() > limit) clean[k] = v;
+    }
+    return clean;
+  } catch { return {}; }
 }
 
-function loadAtualizadasHoje() {
+function saveAtualizadasMap(map) {
   try {
-    const raw = JSON.parse(localStorage.getItem("velloso_atualizadas") || "{}");
-    return raw[hojeKey()] || [];
-  } catch { return []; }
-}
-
-function saveAtualizadasHoje(lista) {
-  try {
-    const raw = JSON.parse(localStorage.getItem("velloso_atualizadas") || "{}");
-    // limpa registros antigos (>7 dias)
-    const limit = new Date(Date.now() - 7 * 86400000);
-    const limitKey = `${limit.getFullYear()}-${String(limit.getMonth()+1).padStart(2,"0")}-${String(limit.getDate()).padStart(2,"0")}`;
-    for (const k of Object.keys(raw)) if (k < limitKey) delete raw[k];
-    raw[hojeKey()] = lista;
-    localStorage.setItem("velloso_atualizadas", JSON.stringify(raw));
+    localStorage.setItem("velloso_atualizadas_v2", JSON.stringify(map));
   } catch {}
+}
+
+// Quantos dias se passaram desde a última marcação local
+function diasDesdeMarcacao(map, pasta) {
+  const iso = map[pasta];
+  if (!iso) return null;
+  const dt = new Date(iso);
+  if (isNaN(dt)) return null;
+  return Math.floor((Date.now() - dt.getTime()) / 86400000);
+}
+
+// True se foi marcado nos últimos N dias (default 15)
+function foiAtualizadoRecentemente(map, pasta, limiteDias = DIAS_LIMITE_URGENCIA) {
+  const d = diasDesdeMarcacao(map, pasta);
+  return d !== null && d < limiteDias;
 }
 
 async function chamarWebhookAtualizacao(pasta, familia) {
@@ -879,7 +890,131 @@ async function chamarWebhookEtapa(pasta, familia, novaEtapa) {
   } catch (e) { console.error("[velloso] webhook etapa erro:", e); }
 }
 
-/* ── PAINEL ATUALIZE FAMÍLIAS DO DIA (REMOVIDO - mantido apenas o helper) ── */
+/* ── PAINEL DE TAREFAS — Top 15 famílias mais críticas ── */
+function PainelTarefas({ processos, atualizadasMap, onToggle }) {
+  // Calcula críticas: processos não finalizados, dias sem update >= 15 (ou sem registro)
+  // E que NÃO foram marcadas como atualizadas localmente nos últimos 15 dias
+  const tarefas = useMemo(() => {
+    const criticas = processos
+      .filter(p => !ehFinalizado(p.etapa))
+      .map(p => ({ ...p, dias: diasSemUpdate(p.ultimaAtt) }))
+      .filter(p => p.dias === null || p.dias >= DIAS_LIMITE_URGENCIA)
+      .filter(p => !foiAtualizadoRecentemente(atualizadasMap, p.pasta))
+      .sort((a, b) => {
+        if (a.dias === null && b.dias === null) return 0;
+        if (a.dias === null) return -1; // sem registro = topo
+        if (b.dias === null) return 1;
+        return b.dias - a.dias;
+      })
+      .slice(0, 15);
+    return criticas;
+  }, [processos, atualizadasMap]);
+
+  const totalCriticas = useMemo(() =>
+    processos
+      .filter(p => !ehFinalizado(p.etapa))
+      .filter(p => {
+        const d = diasSemUpdate(p.ultimaAtt);
+        return d === null || d >= DIAS_LIMITE_URGENCIA;
+      })
+      .filter(p => !foiAtualizadoRecentemente(atualizadasMap, p.pasta))
+      .length,
+    [processos, atualizadasMap]
+  );
+
+  const atualizadasUltimos15 = useMemo(() => {
+    return Object.keys(atualizadasMap).filter(p =>
+      foiAtualizadoRecentemente(atualizadasMap, p)
+    ).length;
+  }, [atualizadasMap]);
+
+  function corDias(d) {
+    if (d === null) return "#8b6b7d";
+    if (d >= 60) return "#ce2b37";
+    if (d >= 30) return "#d97706";
+    return "#592343";
+  }
+
+  return (
+    <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-[#e8ddd4]">
+      {/* Header */}
+      <div className="p-5 relative overflow-hidden" style={{ background: "linear-gradient(135deg,#592343 0%,#6b3a5d 50%,#8b3a6d 100%)" }}>
+        <div className="absolute top-0 right-0 w-48 h-48 rounded-full opacity-10" style={{ background: "white", transform: "translate(40%,-40%)" }} />
+        <div className="relative flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <div className="flex items-center gap-2.5 mb-1">
+              <span className="text-2xl">📋</span>
+              <h3 className="text-lg md:text-xl font-bold text-white">Tarefas do Dia — Atualizar Famílias</h3>
+            </div>
+            <p className="text-white/75 text-xs">
+              {tarefas.length === 0
+                ? "✨ Nenhuma família crítica agora"
+                : <>Mostrando <strong className="text-white">{tarefas.length}</strong> de <strong className="text-white">{totalCriticas}</strong> família(s) crítica(s)</>
+              }
+              {atualizadasUltimos15 > 0 && <> · ✓ <strong className="text-white">{atualizadasUltimos15}</strong> atualizada(s) nos últimos 15 dias</>}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Lista */}
+      <div className="p-3 md:p-4 space-y-2 max-h-[520px] overflow-y-auto">
+        {tarefas.length === 0 && (
+          <div className="text-center py-10">
+            <div className="text-5xl mb-2">🎉</div>
+            <p className="text-base font-bold text-[#592343]">Tudo em dia!</p>
+            <p className="text-xs text-[#8b6b7d] mt-1">Volte amanhã para conferir novas tarefas</p>
+          </div>
+        )}
+        {tarefas.map((p, i) => {
+          const cor = corDias(p.dias);
+          const labelDias = p.dias === null ? "Sem registro" : `${p.dias}d`;
+          return (
+            <button
+              key={p.pasta + "-" + i}
+              onClick={() => onToggle(p)}
+              className="group w-full flex items-center gap-3 p-3 rounded-xl border border-[#e8ddd4] hover:border-[#592343] hover:shadow-sm hover:bg-[#faf8f6] transition-all text-left"
+            >
+              {/* Checkbox */}
+              <div className="w-6 h-6 rounded-full border-2 border-[#592343] flex items-center justify-center flex-shrink-0 group-hover:bg-[#592343]/10 transition-all">
+                <div className="w-2 h-2 rounded-full bg-[#592343] opacity-0 group-hover:opacity-30"/>
+              </div>
+
+              {/* Conteúdo */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-[#2a2a2a] text-sm">{p.familia}</span>
+                  <span className="font-mono text-[10px] text-[#8b6b7d] bg-[#f5ede8] px-1.5 py-0.5 rounded">#{p.pasta}</span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-[#8b6b7d] flex-wrap">
+                  {p.tipo && <span>{p.tipo}</span>}
+                  {p.tipo && p.etapa && <span>·</span>}
+                  {p.etapa && <span className="text-[#592343] font-medium">{p.etapa}</span>}
+                  {p.responsavel && <><span>·</span><span>{p.responsavel}</span></>}
+                </div>
+              </div>
+
+              {/* Badge dias */}
+              <div className="flex flex-col items-end flex-shrink-0">
+                <span
+                  className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full text-white whitespace-nowrap tracking-wider"
+                  style={{ background: cor, boxShadow: `0 2px 6px ${cor}40` }}
+                >
+                  {labelDias}
+                </span>
+                <span className="text-[9px] text-[#8b6b7d] mt-0.5">
+                  {p.dias === null ? "—" : "sem update"}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ── PAINEL ANTIGO DESATIVADO ── */
 function _PainelAtualizacoes_DESATIVADO({ processos }) {
   const [atualizadas, setAtualizadas] = useState([]);
 
@@ -1069,10 +1204,10 @@ const ETAPAS_PADRAO = [
 function TelaProcessos({processos}) {
   const [busca, setBusca] = useState("");
   const [pagina, setPagina] = useState(1);
-  const [atualizadas, setAtualizadas] = useState([]);
+  const [atualizadasMap, setAtualizadasMap] = useState({}); // { pasta: ISOdate }
   const [etapasLocal, setEtapasLocal] = useState({}); // { pasta: "nova etapa" }
 
-  useEffect(() => { setAtualizadas(loadAtualizadasHoje()); }, []);
+  useEffect(() => { setAtualizadasMap(loadAtualizadasMap()); }, []);
 
   // Lista de etapas únicas (extraídas da planilha + padrão)
   const etapasUnicas = useMemo(() => {
@@ -1103,15 +1238,18 @@ function TelaProcessos({processos}) {
   const ativos  = processos.filter(p=>!ehFinalizado(p.etapa)).length;
   const finais  = processos.filter(p=>ehFinalizado(p.etapa)).length;
 
-  // Marca/desmarca como atualizado hoje
+  // Marca/desmarca como atualizado hoje (timestamp ISO)
   function toggleAtualizado(p) {
-    const isAdding = !atualizadas.includes(p.pasta);
-    const nova = isAdding
-      ? [...atualizadas, p.pasta]
-      : atualizadas.filter(x => x !== p.pasta);
-    setAtualizadas(nova);
-    saveAtualizadasHoje(nova);
-    if (isAdding) chamarWebhookAtualizacao(p.pasta, p.familia);
+    const jaMarcado = foiAtualizadoRecentemente(atualizadasMap, p.pasta);
+    const novoMap = { ...atualizadasMap };
+    if (jaMarcado) {
+      delete novoMap[p.pasta]; // desfaz
+    } else {
+      novoMap[p.pasta] = new Date().toISOString();
+    }
+    setAtualizadasMap(novoMap);
+    saveAtualizadasMap(novoMap);
+    if (!jaMarcado) chamarWebhookAtualizacao(p.pasta, p.familia);
   }
 
   // Muda a etapa do processo
@@ -1142,6 +1280,9 @@ function TelaProcessos({processos}) {
 
   return(
     <div className="space-y-4">
+      {/* 📋 Painel de Tarefas — Top 15 famílias mais críticas */}
+      <PainelTarefas processos={processos} atualizadasMap={atualizadasMap} onToggle={toggleAtualizado} />
+
       <div className="grid grid-cols-3 gap-4">
         {[
           {label:"Total",val:processos.length,cor:"#592343"},
@@ -1169,7 +1310,6 @@ function TelaProcessos({processos}) {
           <h3 className="text-lg font-bold text-[#592343]">Controle de Processos</h3>
           <div className="flex items-center gap-3">
             <span className="text-sm text-[#8b6b7d]">{filtered.length} encontrados</span>
-            {atualizadas.length>0 && <span className="text-xs font-bold text-[#00924a]">✓ {atualizadas.length} atualizadas hoje</span>}
             {totalPags>1&&<span className="text-xs text-[#8b6b7d]">pág. {pagina}/{totalPags}</span>}
           </div>
         </div>
@@ -1185,7 +1325,7 @@ function TelaProcessos({processos}) {
               {pagAtual.map((p,i)=>{
                 const etapa = getEtapa(p);
                 const dias = diasSemUpdate(p.ultimaAtt);
-                const marcado = atualizadas.includes(p.pasta);
+                const marcado = foiAtualizadoRecentemente(atualizadasMap, p.pasta);
                 const finalizado = ehFinalizado(etapa);
                 return (
                   <tr key={i} className={`hover:bg-[#faf8f6] transition-colors ${finalizado?"opacity-60":""} ${marcado?"bg-[#00924a]/5":""}`}>
