@@ -849,10 +849,22 @@ function diasDesdeMarcacao(map, pasta) {
   return Math.floor((Date.now() - dt.getTime()) / 86400000);
 }
 
-// True se foi marcado nos últimos N dias (default 15)
+// True se foi marcado nos últimos N dias (default 15) — usado pra esconder do painel de tarefas
 function foiAtualizadoRecentemente(map, pasta, limiteDias = DIAS_LIMITE_URGENCIA) {
   const d = diasDesdeMarcacao(map, pasta);
   return d !== null && d < limiteDias;
+}
+
+// True se foi marcado HOJE (mesmo dia) — usado para o visual da bolinha verde
+function marcadoHoje(map, pasta) {
+  const iso = map[pasta];
+  if (!iso) return false;
+  const dt = new Date(iso);
+  if (isNaN(dt)) return false;
+  const hoje = new Date();
+  return dt.getFullYear() === hoje.getFullYear()
+      && dt.getMonth() === hoje.getMonth()
+      && dt.getDate() === hoje.getDate();
 }
 
 async function chamarWebhookAtualizacao(pasta, familia) {
@@ -1387,17 +1399,19 @@ function TelaProcessos({processos}) {
   const finais  = processos.filter(p=>ehFinalizado(p.etapa)).length;
 
   // Marca/desmarca como atualizado hoje (timestamp ISO)
+  // Lógica: se foi marcado HOJE → desfaz. Se não foi marcado hoje → marca com timestamp atual.
   function toggleAtualizado(p) {
-    const jaMarcado = foiAtualizadoRecentemente(atualizadasMap, p.pasta);
+    const eraHoje = marcadoHoje(atualizadasMap, p.pasta);
     const novoMap = { ...atualizadasMap };
-    if (jaMarcado) {
-      delete novoMap[p.pasta]; // desfaz
+    if (eraHoje) {
+      delete novoMap[p.pasta]; // desfaz marcação de hoje
     } else {
+      // Se foi marcado em outro dia OU nunca, atualiza para agora
       novoMap[p.pasta] = new Date().toISOString();
     }
     setAtualizadasMap(novoMap);
     saveAtualizadasMap(novoMap);
-    if (!jaMarcado) chamarWebhookAtualizacao(p.pasta, p.familia);
+    if (!eraHoje) chamarWebhookAtualizacao(p.pasta, p.familia);
   }
 
   // Muda a etapa do processo
@@ -1476,7 +1490,7 @@ function TelaProcessos({processos}) {
               {pagAtual.map((p,i)=>{
                 const etapa = getEtapa(p);
                 const dias = diasSemUpdate(p.ultimaAtt);
-                const marcado = foiAtualizadoRecentemente(atualizadasMap, p.pasta);
+                const marcado = marcadoHoje(atualizadasMap, p.pasta); // bolinha verde só hoje
                 const finalizado = ehFinalizado(etapa);
                 return (
                   <tr key={i} className={`hover:bg-[#faf8f6] transition-colors ${finalizado?"opacity-60":""} ${marcado?"bg-[#00924a]/5":""}`}>
@@ -1511,11 +1525,15 @@ function TelaProcessos({processos}) {
                     <td className="px-3 py-2 text-center">
                       <button
                         onClick={() => toggleAtualizado(p)}
-                        title={
-                          marcado
-                            ? `✓ Atualizado em ${new Date(atualizadasMap[p.pasta]).toLocaleString("pt-BR")} — clique para desfazer`
-                            : "Marcar como atualizado agora"
-                        }
+                        title={(() => {
+                          if (marcado) return `✓ Atualizado HOJE às ${new Date(atualizadasMap[p.pasta]).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})} — clique para desfazer`;
+                          const ultimaIso = atualizadasMap[p.pasta];
+                          if (ultimaIso) {
+                            const d = diasDesdeMarcacao(atualizadasMap, p.pasta);
+                            return `Última marcação há ${d} dia(s). Clique para registrar nova atualização.`;
+                          }
+                          return "Marcar como atualizado agora";
+                        })()}
                         className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
                           marcado
                             ? "bg-[#00924a] border-[#00924a] hover:scale-110"
