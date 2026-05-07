@@ -272,8 +272,105 @@ const TABS = [
   {id:"estoque",   label:"Estoque",   icon:<IcoEst/>,   cor:"#ce2b37"},
 ];
 
+/* ── SELETOR DE USUÁRIO ── */
+function SeletorUsuario({ collapsed, usuario, setUsuario }) {
+  const [aberto, setAberto] = useState(false);
+  const initial = (usuario || "?").charAt(0).toUpperCase();
+  const cor = usuario === "Rodrigo" ? "#592343"
+            : usuario === "Jennifer" ? "#ce2b37"
+            : usuario === "Priscilla" ? "#6b3a5d"
+            : usuario === "Willian" ? "#00924a"
+            : "#8b6b7d";
+  if (collapsed) {
+    return (
+      <button
+        onClick={() => setAberto(a => !a)}
+        title={usuario || "Quem está usando?"}
+        style={{
+          width: 40, height: 40, margin: "8px auto", display: "block",
+          borderRadius: "50%", background: cor, color: "white",
+          border: "none", cursor: "pointer", fontWeight: 700, fontSize: 14
+        }}
+      >
+        {initial}
+      </button>
+    );
+  }
+  return (
+    <div style={{ padding: "8px", borderBottom: "1px solid #e8ddd4", position: "relative" }}>
+      <button
+        onClick={() => setAberto(a => !a)}
+        style={{
+          width: "100%", display: "flex", alignItems: "center", gap: 10,
+          padding: "8px 10px", borderRadius: 10,
+          background: usuario ? `${cor}15` : "#faf8f6",
+          border: `1px solid ${usuario ? cor + "40" : "#e8ddd4"}`,
+          cursor: "pointer", textAlign: "left",
+        }}
+      >
+        <div style={{
+          width: 32, height: 32, borderRadius: "50%",
+          background: cor, color: "white",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontWeight: 700, fontSize: 13, flexShrink: 0
+        }}>{initial}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 10, color: "#8b6b7d", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>
+            Usuário
+          </div>
+          <div style={{ fontSize: 13, color: usuario ? cor : "#8b6b7d", fontWeight: 600, lineHeight: 1.2, marginTop: 2 }}>
+            {usuario || "Selecionar..."}
+          </div>
+        </div>
+        <svg width="14" height="14" fill="none" stroke="#8b6b7d" viewBox="0 0 24 24" style={{ transform: aberto ? "rotate(180deg)" : "" }}>
+          <polyline points="6 9 12 15 18 9" strokeWidth="2"/>
+        </svg>
+      </button>
+      {aberto && (
+        <div style={{
+          position: "absolute", top: "100%", left: 8, right: 8, marginTop: 4,
+          background: "white", borderRadius: 10, border: "1px solid #e8ddd4",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.08)", zIndex: 100, padding: 4
+        }}>
+          {USUARIOS_PADRAO.map(nome => {
+            const c = nome === "Rodrigo" ? "#592343"
+                    : nome === "Jennifer" ? "#ce2b37"
+                    : nome === "Priscilla" ? "#6b3a5d"
+                    : "#00924a";
+            const ativo = usuario === nome;
+            return (
+              <button
+                key={nome}
+                onClick={() => { setUsuario(nome); setAberto(false); }}
+                style={{
+                  width: "100%", display: "flex", alignItems: "center", gap: 10,
+                  padding: "8px 10px", borderRadius: 8, border: "none",
+                  background: ativo ? `${c}15` : "transparent",
+                  color: ativo ? c : "#2a2a2a", cursor: "pointer",
+                  fontWeight: ativo ? 700 : 500, fontSize: 13, marginBottom: 2
+                }}
+                onMouseEnter={e => { if (!ativo) e.currentTarget.style.background = "#faf8f6"; }}
+                onMouseLeave={e => { if (!ativo) e.currentTarget.style.background = "transparent"; }}
+              >
+                <div style={{
+                  width: 24, height: 24, borderRadius: "50%",
+                  background: c, color: "white",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontWeight: 700, fontSize: 11, flexShrink: 0
+                }}>{nome.charAt(0)}</div>
+                <span>{nome}</span>
+                {ativo && <span style={{ marginLeft: "auto", color: c }}>✓</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── SIDEBAR ── */
-function Sidebar({aba, setAba, ultima, carregar}) {
+function Sidebar({aba, setAba, ultima, carregar, usuario, setUsuario}) {
   const [collapsed, setCollapsed] = useState(false);
   return (
     <aside style={{
@@ -292,6 +389,7 @@ function Sidebar({aba, setAba, ultima, carregar}) {
         <div style={{flex:1,background:"#009246"}}/><div style={{flex:1,background:"#ffffff",border:"1px solid #e8ddd4"}}/><div style={{flex:1,background:"#ce2b37"}}/>
       </div>
       <LogoVelloso collapsed={collapsed}/>
+      <SeletorUsuario collapsed={collapsed} usuario={usuario} setUsuario={setUsuario}/>
       <nav style={{flex:1, padding:"8px 8px"}}>
         {TABS.map(t=>(
           <button key={t.id} onClick={()=>setAba(t.id)} title={collapsed?t.label:""} style={{
@@ -820,15 +918,28 @@ function diasSemUpdate(dataStr) {
   return Math.max(0, Math.floor((new Date() - dt) / 86400000));
 }
 
-// Carrega o mapa { pasta: ISOdate } de atualizações locais
+// ── Identificação do usuário ativo ──
+const USUARIOS_PADRAO = ["Rodrigo", "Jennifer", "Priscilla", "Willian"];
+function loadUsuario() {
+  try { return localStorage.getItem("velloso_usuario") || ""; } catch { return ""; }
+}
+function saveUsuario(u) {
+  try { localStorage.setItem("velloso_usuario", u || ""); } catch {}
+}
+
+// Carrega o mapa { pasta: { iso, usuario } } de atualizações locais
+// Compatível com formato antigo (string ISO direto) — migra automaticamente
 function loadAtualizadasMap() {
   try {
     const raw = JSON.parse(localStorage.getItem("velloso_atualizadas_v2") || "{}");
-    // Limpa registros antigos (mais de 60 dias)
-    const limit = Date.now() - 60 * 86400000;
+    const limit = Date.now() - 60 * 86400000; // 60 dias
     const clean = {};
     for (const [k, v] of Object.entries(raw)) {
-      if (new Date(v).getTime() > limit) clean[k] = v;
+      let entry = v;
+      // Migração: se ainda é string, vira objeto
+      if (typeof v === "string") entry = { iso: v, usuario: "" };
+      if (!entry || !entry.iso) continue;
+      if (new Date(entry.iso).getTime() > limit) clean[k] = entry;
     }
     return clean;
   } catch { return {}; }
@@ -840,9 +951,21 @@ function saveAtualizadasMap(map) {
   } catch {}
 }
 
+// Helpers para extrair iso do entry (compat)
+function getIso(entry) {
+  if (!entry) return null;
+  if (typeof entry === "string") return entry;
+  return entry.iso || null;
+}
+function getUsuario(entry) {
+  if (!entry) return "";
+  if (typeof entry === "string") return "";
+  return entry.usuario || "";
+}
+
 // Quantos dias se passaram desde a última marcação local
 function diasDesdeMarcacao(map, pasta) {
-  const iso = map[pasta];
+  const iso = getIso(map[pasta]);
   if (!iso) return null;
   const dt = new Date(iso);
   if (isNaN(dt)) return null;
@@ -857,7 +980,7 @@ function foiAtualizadoRecentemente(map, pasta, limiteDias = DIAS_LIMITE_URGENCIA
 
 // True se foi marcado HOJE (mesmo dia) — usado para o visual da bolinha verde
 function marcadoHoje(map, pasta) {
-  const iso = map[pasta];
+  const iso = getIso(map[pasta]);
   if (!iso) return false;
   const dt = new Date(iso);
   if (isNaN(dt)) return false;
@@ -867,8 +990,8 @@ function marcadoHoje(map, pasta) {
       && dt.getDate() === hoje.getDate();
 }
 
-async function chamarWebhookAtualizacao(pasta, familia) {
-  if (!WEBHOOK_PROCESSO_UPDATE) return; // não configurado, ignora
+async function chamarWebhookAtualizacao(pasta, familia, usuario = "") {
+  if (!WEBHOOK_PROCESSO_UPDATE) return;
   try {
     await fetch(WEBHOOK_PROCESSO_UPDATE, {
       method: "POST",
@@ -877,6 +1000,7 @@ async function chamarWebhookAtualizacao(pasta, familia) {
         acao: "atualizar",
         pasta,
         familia,
+        usuario: usuario || loadUsuario() || "",
         dataAtualizacao: new Date().toLocaleDateString("pt-BR"),
         timestamp: new Date().toISOString(),
       }),
@@ -884,7 +1008,7 @@ async function chamarWebhookAtualizacao(pasta, familia) {
   } catch (e) { console.error("[velloso] webhook erro:", e); }
 }
 
-async function chamarWebhookEtapa(pasta, familia, novaEtapa) {
+async function chamarWebhookEtapa(pasta, familia, novaEtapa, usuario = "") {
   if (!WEBHOOK_PROCESSO_UPDATE) return;
   try {
     await fetch(WEBHOOK_PROCESSO_UPDATE, {
@@ -895,6 +1019,7 @@ async function chamarWebhookEtapa(pasta, familia, novaEtapa) {
         pasta,
         familia,
         novaEtapa,
+        usuario: usuario || loadUsuario() || "",
         dataAtualizacao: new Date().toLocaleDateString("pt-BR"),
         timestamp: new Date().toISOString(),
       }),
@@ -909,15 +1034,18 @@ function PainelMinhasAtualizacoes({ processos, atualizadasMap, onToggle }) {
   // Cria lista de marcações com nome da família
   const lista = useMemo(() => {
     const items = Object.entries(atualizadasMap)
-      .map(([pasta, iso]) => {
+      .map(([pasta, entry]) => {
+        const iso = getIso(entry);
+        const usuario = getUsuario(entry);
         const proc = processos.find(p => p.pasta === pasta);
         return {
           pasta,
           familia: proc?.familia || "(família não encontrada)",
           tipo: proc?.tipo || "",
           etapa: proc?.etapa || "",
+          usuario,
           dataIso: iso,
-          dt: new Date(iso),
+          dt: iso ? new Date(iso) : new Date(NaN),
         };
       })
       .filter(x => !isNaN(x.dt))
@@ -936,8 +1064,19 @@ function PainelMinhasAtualizacoes({ processos, atualizadasMap, onToggle }) {
 
   const totalHoje = useMemo(() => {
     const inicio = new Date(); inicio.setHours(0, 0, 0, 0);
-    return Object.values(atualizadasMap).filter(iso => new Date(iso) >= inicio).length;
+    return Object.values(atualizadasMap).filter(entry => {
+      const iso = getIso(entry);
+      return iso && new Date(iso) >= inicio;
+    }).length;
   }, [atualizadasMap]);
+
+  function corUsuario(u) {
+    if (u === "Rodrigo") return "#592343";
+    if (u === "Jennifer") return "#ce2b37";
+    if (u === "Priscilla") return "#6b3a5d";
+    if (u === "Willian") return "#00924a";
+    return "#8b6b7d";
+  }
 
   function fmtHora(dt) {
     return dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -1019,6 +1158,14 @@ function PainelMinhasAtualizacoes({ processos, atualizadasMap, onToggle }) {
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-bold text-[#2a2a2a] text-sm">{x.familia}</span>
                 <span className="font-mono text-[10px] text-[#8b6b7d] bg-white px-1.5 py-0.5 rounded border border-[#e8ddd4]">#{x.pasta}</span>
+                {x.usuario && (
+                  <span
+                    className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded text-white tracking-wide"
+                    style={{ background: corUsuario(x.usuario) }}
+                  >
+                    👤 {x.usuario}
+                  </span>
+                )}
               </div>
               {(x.tipo || x.etapa) && (
                 <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-[#6b7280] flex-wrap">
@@ -1045,6 +1192,153 @@ function PainelMinhasAtualizacoes({ processos, atualizadasMap, onToggle }) {
             </button>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── PAINEL DE PRODUTIVIDADE — gráfico semanal ── */
+function PainelProdutividade({ atualizadasMap }) {
+  const dados = useMemo(() => {
+    const hoje = new Date(); hoje.setHours(0,0,0,0);
+    const dias = [];
+    for (let i = 6; i >= 0; i--) {
+      const dt = new Date(hoje.getTime() - i * 86400000);
+      dias.push({
+        data: dt,
+        label: dt.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".",""),
+        diaNum: dt.getDate(),
+        eHoje: i === 0,
+        contagem: 0,
+        porUsuario: {},
+      });
+    }
+    for (const entry of Object.values(atualizadasMap)) {
+      const iso = getIso(entry); if (!iso) continue;
+      const dt = new Date(iso); if (isNaN(dt)) continue;
+      const dtZero = new Date(dt); dtZero.setHours(0,0,0,0);
+      const idx = dias.findIndex(d => d.data.getTime() === dtZero.getTime());
+      if (idx >= 0) {
+        dias[idx].contagem++;
+        const u = getUsuario(entry) || "—";
+        dias[idx].porUsuario[u] = (dias[idx].porUsuario[u] || 0) + 1;
+      }
+    }
+    return dias;
+  }, [atualizadasMap]);
+
+  const max = Math.max(...dados.map(d => d.contagem), 1);
+  const totalSemana = dados.reduce((s, d) => s + d.contagem, 0);
+
+  // Estatísticas por usuário
+  const porUsuario = useMemo(() => {
+    const acc = {};
+    for (const entry of Object.values(atualizadasMap)) {
+      const iso = getIso(entry); if (!iso) continue;
+      const dt = new Date(iso);
+      const limite = new Date(); limite.setHours(0,0,0,0);
+      limite.setDate(limite.getDate() - 6);
+      if (dt < limite) continue;
+      const u = getUsuario(entry) || "Sem identificação";
+      acc[u] = (acc[u] || 0) + 1;
+    }
+    return Object.entries(acc).sort((a, b) => b[1] - a[1]);
+  }, [atualizadasMap]);
+
+  function corUsuario(u) {
+    if (u === "Rodrigo") return "#592343";
+    if (u === "Jennifer") return "#ce2b37";
+    if (u === "Priscilla") return "#6b3a5d";
+    if (u === "Willian") return "#00924a";
+    return "#8b6b7d";
+  }
+
+  return (
+    <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-[#e8ddd4]">
+      {/* Header */}
+      <div className="p-5" style={{ background: "linear-gradient(135deg,#1e293b 0%,#334155 100%)" }}>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <div className="flex items-center gap-2.5 mb-1">
+              <span className="text-2xl">📊</span>
+              <h3 className="text-lg md:text-xl font-bold text-white">Produtividade da Semana</h3>
+            </div>
+            <p className="text-white/75 text-xs">
+              <strong className="text-white">{totalSemana}</strong> família(s) atualizada(s) nos últimos 7 dias
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Conteúdo */}
+      <div className="p-5">
+        {/* Gráfico de barras */}
+        <div className="flex items-end justify-between gap-2 h-40 mb-4">
+          {dados.map((d, i) => {
+            const altura = (d.contagem / max) * 100;
+            const cor = d.eHoje ? "#592343" : "#8b6b7d";
+            return (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
+                <div className="w-full flex items-end justify-center" style={{ height: 120 }}>
+                  <div
+                    className="w-full max-w-[40px] rounded-t-md transition-all duration-500 relative group cursor-pointer"
+                    style={{
+                      height: `${altura}%`,
+                      minHeight: d.contagem > 0 ? 6 : 2,
+                      background: d.contagem > 0
+                        ? `linear-gradient(180deg, ${cor} 0%, ${cor}cc 100%)`
+                        : "#e8ddd4",
+                    }}
+                    title={`${d.contagem} atualização(ões) em ${d.data.toLocaleDateString("pt-BR")}`}
+                  >
+                    {d.contagem > 0 && (
+                      <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-xs font-bold" style={{ color: cor }}>
+                        {d.contagem}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className={`text-[10px] uppercase font-bold tracking-wider ${d.eHoje ? "text-[#592343]" : "text-[#8b6b7d]"}`}>
+                    {d.label}
+                  </div>
+                  <div className={`text-xs font-semibold ${d.eHoje ? "text-[#592343]" : "text-[#2a2a2a]"}`}>
+                    {d.diaNum}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Ranking de usuários */}
+        {porUsuario.length > 0 && (
+          <div className="pt-4 border-t border-[#e8ddd4]">
+            <p className="text-[10px] uppercase font-bold text-[#8b6b7d] tracking-widest mb-3">🏆 Ranking dos 7 dias</p>
+            <div className="space-y-2">
+              {porUsuario.map(([nome, qtd], i) => {
+                const c = corUsuario(nome);
+                const pct = totalSemana > 0 ? Math.round((qtd / totalSemana) * 100) : 0;
+                const medalha = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i+1}º`;
+                return (
+                  <div key={nome} className="flex items-center gap-3">
+                    <span className="text-base w-6 text-center flex-shrink-0">{medalha}</span>
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ background: c }}>
+                      {nome.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-sm font-semibold text-[#2a2a2a] flex-1 truncate">{nome}</span>
+                    <div className="flex-1 max-w-[140px]">
+                      <div className="w-full bg-[#f5ede8] rounded-full h-1.5">
+                        <div className="h-1.5 rounded-full transition-all" style={{ width: `${pct}%`, background: c }}/>
+                      </div>
+                    </div>
+                    <span className="text-sm font-bold whitespace-nowrap" style={{ color: c }}>{qtd}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1361,10 +1655,10 @@ const ETAPAS_PADRAO = [
   "✅ Concluído",
 ];
 
-function TelaProcessos({processos}) {
+function TelaProcessos({processos, usuario = ""}) {
   const [busca, setBusca] = useState("");
   const [pagina, setPagina] = useState(1);
-  const [atualizadasMap, setAtualizadasMap] = useState({}); // { pasta: ISOdate }
+  const [atualizadasMap, setAtualizadasMap] = useState({}); // { pasta: { iso, usuario } }
   const [etapasLocal, setEtapasLocal] = useState({}); // { pasta: "nova etapa" }
 
   useEffect(() => { setAtualizadasMap(loadAtualizadasMap()); }, []);
@@ -1406,18 +1700,17 @@ function TelaProcessos({processos}) {
     if (eraHoje) {
       delete novoMap[p.pasta]; // desfaz marcação de hoje
     } else {
-      // Se foi marcado em outro dia OU nunca, atualiza para agora
-      novoMap[p.pasta] = new Date().toISOString();
+      novoMap[p.pasta] = { iso: new Date().toISOString(), usuario };
     }
     setAtualizadasMap(novoMap);
     saveAtualizadasMap(novoMap);
-    if (!eraHoje) chamarWebhookAtualizacao(p.pasta, p.familia);
+    if (!eraHoje) chamarWebhookAtualizacao(p.pasta, p.familia, usuario);
   }
 
   // Muda a etapa do processo
   function mudarEtapa(p, novaEtapa) {
     setEtapasLocal(prev => ({ ...prev, [p.pasta]: novaEtapa }));
-    chamarWebhookEtapa(p.pasta, p.familia, novaEtapa);
+    chamarWebhookEtapa(p.pasta, p.familia, novaEtapa, usuario);
   }
 
   function getEtapa(p) {
@@ -1442,11 +1735,25 @@ function TelaProcessos({processos}) {
 
   return(
     <div className="space-y-4">
+      {/* Aviso de identificação */}
+      {!usuario && (
+        <div className="bg-gradient-to-r from-[#592343]/10 to-[#8b3a6d]/10 border border-[#592343]/30 rounded-xl p-4 flex items-center gap-3">
+          <span className="text-2xl">👤</span>
+          <div className="flex-1">
+            <p className="font-bold text-[#592343] text-sm">Identifique-se na barra lateral</p>
+            <p className="text-xs text-[#8b6b7d]">Selecione seu nome no canto superior esquerdo para que suas atualizações sejam registradas</p>
+          </div>
+        </div>
+      )}
+
       {/* 📋 Painéis de Tarefas e Histórico de Atualizações */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <PainelTarefas processos={processos} atualizadasMap={atualizadasMap} onToggle={toggleAtualizado} />
         <PainelMinhasAtualizacoes processos={processos} atualizadasMap={atualizadasMap} onToggle={toggleAtualizado} />
       </div>
+
+      {/* 📊 Gráfico de Produtividade */}
+      <PainelProdutividade atualizadasMap={atualizadasMap} />
 
       <div className="grid grid-cols-3 gap-4">
         {[
@@ -1526,11 +1833,16 @@ function TelaProcessos({processos}) {
                       <button
                         onClick={() => toggleAtualizado(p)}
                         title={(() => {
-                          if (marcado) return `✓ Atualizado HOJE às ${new Date(atualizadasMap[p.pasta]).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})} — clique para desfazer`;
-                          const ultimaIso = atualizadasMap[p.pasta];
-                          if (ultimaIso) {
+                          const entry = atualizadasMap[p.pasta];
+                          const iso = getIso(entry);
+                          const u = getUsuario(entry);
+                          if (marcado) {
+                            const hora = new Date(iso).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+                            return `✓ Atualizado HOJE às ${hora}${u ? " por " + u : ""} — clique para desfazer`;
+                          }
+                          if (iso) {
                             const d = diasDesdeMarcacao(atualizadasMap, p.pasta);
-                            return `Última marcação há ${d} dia(s). Clique para registrar nova atualização.`;
+                            return `Última marcação há ${d} dia(s)${u ? " por " + u : ""}. Clique para registrar nova atualização.`;
                           }
                           return "Marcar como atualizado agora";
                         })()}
@@ -1657,6 +1969,10 @@ export default function App() {
   const [eventos, setEventos] = useState([]);
   const [processos, setProcessos] = useState([]);
   const [ultima, setUltima] = useState("");
+  const [usuario, setUsuarioState] = useState("");
+
+  useEffect(() => { setUsuarioState(loadUsuario()); }, []);
+  function setUsuario(u) { saveUsuario(u); setUsuarioState(u); }
 
   async function carregar() {
     try {
@@ -1672,7 +1988,7 @@ export default function App() {
 
   return(
     <div style={{display:"flex",minHeight:"100vh",background:"#faf8f6"}}>
-      <Sidebar aba={aba} setAba={setAba} ultima={ultima} carregar={carregar}/>
+      <Sidebar aba={aba} setAba={setAba} ultima={ultima} carregar={carregar} usuario={usuario} setUsuario={setUsuario}/>
       <main style={{flex:1,overflowX:"hidden"}}>
         <div style={{padding:"32px 32px 64px"}}>
           <div style={{marginBottom:28}}>
@@ -1682,7 +1998,7 @@ export default function App() {
           {aba==="inicio"     && <TelaInicio eventos={eventos} vendas={vendas} processos={processos}/>}
           {aba==="calendario" && <TelaCalendario eventos={eventos}/>}
           {aba==="vendas"     && <TelaVendas vendas={vendas}/>}
-          {aba==="processos"  && <TelaProcessos processos={processos}/>}
+          {aba==="processos"  && <TelaProcessos processos={processos} usuario={usuario}/>}
           {aba==="estoque"    && <TelaEstoque estoque={estoque}/>}
         </div>
       </main>
