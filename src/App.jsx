@@ -278,7 +278,7 @@ function SeletorUsuario({ collapsed, usuario, setUsuario }) {
   const initial = (usuario || "?").charAt(0).toUpperCase();
   const cor = usuario === "Rodrigo" ? "#592343"
             : usuario === "Jennifer" ? "#ce2b37"
-            : usuario === "Kimberly" ? "#00924a"
+            : usuario === "Kimberli" ? "#00924a"
             : "#8b6b7d";
   if (collapsed) {
     return (
@@ -334,7 +334,7 @@ function SeletorUsuario({ collapsed, usuario, setUsuario }) {
           {USUARIOS_PADRAO.map(nome => {
             const c = nome === "Rodrigo" ? "#592343"
                     : nome === "Jennifer" ? "#ce2b37"
-                    : nome === "Kimberly" ? "#00924a"
+                    : nome === "Kimberli" ? "#00924a"
                     : "#8b6b7d";
             const ativo = usuario === nome;
             return (
@@ -918,7 +918,7 @@ function diasSemUpdate(dataStr) {
 }
 
 // ── Identificação do usuário ativo ──
-const USUARIOS_PADRAO = ["Rodrigo", "Jennifer", "Kimberly"];
+const USUARIOS_PADRAO = ["Rodrigo", "Jennifer", "Kimberli"];
 function loadUsuario() {
   try { return localStorage.getItem("velloso_usuario") || ""; } catch { return ""; }
 }
@@ -1072,7 +1072,7 @@ function PainelMinhasAtualizacoes({ processos, atualizadasMap, onToggle }) {
   function corUsuario(u) {
     if (u === "Rodrigo") return "#592343";
     if (u === "Jennifer") return "#ce2b37";
-    if (u === "Kimberly") return "#00924a";
+    if (u === "Kimberli") return "#00924a";
     return "#8b6b7d";
   }
 
@@ -1246,7 +1246,7 @@ function PainelProdutividade({ atualizadasMap }) {
   function corUsuario(u) {
     if (u === "Rodrigo") return "#592343";
     if (u === "Jennifer") return "#ce2b37";
-    if (u === "Kimberly") return "#00924a";
+    if (u === "Kimberli") return "#00924a";
     return "#8b6b7d";
   }
 
