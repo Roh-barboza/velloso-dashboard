@@ -805,7 +805,7 @@ function TelaVendas({vendas}) {
 
 /* ── ATUALIZAÇÕES DE PROCESSOS (Painel Inteligente) ── */
 // Configure aqui a URL do webhook do n8n para sincronizar com a planilha
-const WEBHOOK_PROCESSO_UPDATE = ""; // ex: "https://chaoticcow-n8n.cloudfy.live/webhook/atualizar-processo"
+const WEBHOOK_PROCESSO_UPDATE = "https://chaoticcow-n8n.cloudfy.live/webhook/atualizar-processo";
 
 const DIAS_LIMITE_URGENCIA = 15; // a partir de X dias sem update, vira "para atualizar"
 
