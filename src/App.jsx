@@ -45,7 +45,7 @@ function parseVendas(text) {
   const rows = parseCsv(text);
   const data = [];
   let total = 0, totalConfirmado = 0, totalPrevisao = 0;
-  for (let i = 3; i < rows.length; i++) {
+  for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     if (!r[1] || r[1].match(/^\d+$/) || !r[3]) continue;
     // pula linha de cabeçalho "Cliente"
