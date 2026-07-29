@@ -89,8 +89,16 @@ function getContext() {
     iPasta:  findCol(header, "n pasta", "no pasta", "pasta"),
     iEtapa:  findCol(header, "etapa atual", "etapa", "status"),
     iUlt:    findCol(header, "ult atualizacao", "ultima atualizacao", "ult atualizacao", "ultima att", "ult att"),
+    iProx:   findCol(header, "proxima atualizacao", "prox atualizacao", "proxima att", "prox att"),
     iUser:   findCol(header, "atualizado por", "responsavel", "usuario"),
   };
+}
+
+function isoMaisDias(iso, dias) {
+  const d = new Date(iso);
+  if (isNaN(d)) return "";
+  d.setDate(d.getDate() + dias);
+  return isoParaBr(d.toISOString());
 }
 
 function findRowByPasta(ctx, pasta) {
