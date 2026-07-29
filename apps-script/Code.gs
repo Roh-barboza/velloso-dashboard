@@ -133,8 +133,12 @@ function atualizarLinha(pasta, iso, usuario, remover) {
   if (ctx.iUlt < 0) return { ok: false, error: "coluna 'ULT ATUALIZACAO' nao encontrada na planilha" };
   const row = findRowByPasta(ctx, pasta);
   if (row < 0) return { ok: false, error: "pasta " + pasta + " nao encontrada" };
-  const dataStr = remover ? "" : isoParaBr(iso || new Date().toISOString());
+  const isoFinal = iso || new Date().toISOString();
+  const dataStr = remover ? "" : isoParaBr(isoFinal);
   ctx.sh.getRange(row, ctx.iUlt + 1).setValue(dataStr);
+  if (ctx.iProx >= 0) {
+    ctx.sh.getRange(row, ctx.iProx + 1).setValue(remover ? "" : isoMaisDias(isoFinal, 15));
+  }
   if (!remover && ctx.iUser >= 0 && usuario) {
     ctx.sh.getRange(row, ctx.iUser + 1).setValue(usuario);
   }
