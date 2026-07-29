@@ -434,14 +434,8 @@ function Sidebar({aba, setAba, ultima, carregar, usuario, setUsuario}) {
 /* ── HOME ── */
 function TelaInicio({eventos, vendas, processos, usuario, setAba}) {
   const agora = new Date();
-  const [tarefas, setTarefas] = useState([
-    {titulo:"Conferir compromissos do dia",feito:true},
-    {titulo:"Revisar aniversários e contatos",feito:true},
-    {titulo:"Acompanhar processos prioritários",feito:false},
-    {titulo:"Atualizar equipe comercial",feito:false},
-    {titulo:"Verificar próximos prazos",feito:false},
-  ]);
-  const toggleTarefa = i => setTarefas(t=>t.map((x,j)=>j===i?{...x,feito:!x.feito}:x));
+  const diaSemana = agora.getDay(); // 0 = dom, 6 = sab
+  const ehFimDeSemana = diaSemana === 0 || diaSemana === 6;
 
   // Famílias que precisam ser revisadas (>= 15 dias sem update)
   const [atualizadasMap, setAtualizadasMap] = useState({});
@@ -517,49 +511,27 @@ function TelaInicio({eventos, vendas, processos, usuario, setAba}) {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-xl shadow p-6">
-          <h3 className="text-xl font-bold text-[#592343] mb-1">Resumo do dia</h3>
-          <p className="text-xs text-[#8b6b7d] mb-4">{agora.toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long"})}</p>
-          <div className="border-t-2 border-[#592343] pt-4">
-            {eventosHoje.length>0 ? (
-              <div className="space-y-3">
-                {eventosHoje.map((e,i)=>{const c=evtColor(e.tipo); return(
-                  <div key={i} className={`rounded-lg border p-4 ${c.bg} ${c.text}`} style={{borderColor:c.border.replace("border-","")}}>
-                    <div className="flex items-start gap-3">
-                      <span className="text-lg">{evtIcon(e.tipo)}</span>
-                      <div><p className="font-semibold">{e.nome}</p><p className="text-xs opacity-75">{e.tipo} · {e.pais}</p></div>
-                    </div>
+      <div className="bg-white rounded-xl shadow p-6">
+        <h3 className="text-xl font-bold text-[#592343] mb-1">Resumo do dia</h3>
+        <p className="text-xs text-[#8b6b7d] mb-4">{agora.toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long"})}</p>
+        <div className="border-t-2 border-[#592343] pt-4">
+          {eventosHoje.length>0 ? (
+            <div className="space-y-3">
+              {eventosHoje.map((e,i)=>{const c=evtColor(e.tipo); return(
+                <div key={i} className={`rounded-lg border p-4 ${c.bg} ${c.text}`} style={{borderColor:c.border.replace("border-","")}}>
+                  <div className="flex items-start gap-3">
+                    <span className="text-lg">{evtIcon(e.tipo)}</span>
+                    <div><p className="font-semibold">{e.nome}</p><p className="text-xs opacity-75">{e.tipo} · {e.pais}</p></div>
                   </div>
-                );})}
-              </div>
-            ):(
-              <div className="text-center py-8">
-                <p className="text-4xl mb-2">📅</p>
-                <p className="text-sm text-[#8b6b7d]">Nenhum evento cadastrado para hoje.</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow p-6">
-          <div className="flex justify-between items-center mb-1">
-            <h3 className="text-xl font-bold text-[#592343]">Tarefas do dia</h3>
-            <span className="text-xs text-[#8b6b7d]">{tarefas.filter(t=>t.feito).length}/{tarefas.length}</span>
-          </div>
-          <div className="w-full bg-[#f5ede8] rounded-full h-1.5 mb-4">
-            <div className="h-1.5 rounded-full bg-[#00924a] transition-all" style={{width:`${(tarefas.filter(t=>t.feito).length/tarefas.length)*100}%`}}/>
-          </div>
-          <div className="border-t-2 border-[#592343] pt-4 space-y-2">
-            {tarefas.map((t,i)=>(
-              <button key={i} onClick={()=>toggleTarefa(i)} className="w-full flex items-center gap-3 rounded-lg border border-[#e8ddd4] p-3 hover:bg-[#faf8f6] transition-colors text-left">
-                <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${t.feito?"bg-[#00924a] border-[#00924a]":"border-[#592343]"}`}>
-                  {t.feito&&<svg width="10" height="10" fill="none" stroke="white" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" strokeWidth="3"/></svg>}
                 </div>
-                <p className={`text-sm ${t.feito?"text-[#8b6b7d] line-through":"text-[#2a2a2a]"}`}>{t.titulo}</p>
-              </button>
-            ))}
-          </div>
+              );})}
+            </div>
+          ):(
+            <div className="text-center py-8">
+              <p className="text-4xl mb-2">📅</p>
+              <p className="text-sm text-[#8b6b7d]">Nenhum evento cadastrado para hoje.</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -567,13 +539,22 @@ function TelaInicio({eventos, vendas, processos, usuario, setAba}) {
       <div className="bg-white rounded-xl shadow p-6">
         <div className="flex justify-between items-center mb-1">
           <h3 className="text-xl font-bold text-[#592343]">Famílias para atualizar</h3>
-          <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{background: familiasParaAtualizar.length ? "#ce2b37" : "#00924a", color: "white"}}>
-            {familiasParaAtualizar.length} {familiasParaAtualizar.length === 1 ? "pendente" : "pendentes"}
-          </span>
+          {ehFimDeSemana ? (
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{background: "#8b6b7d", color: "white"}}>fim de semana</span>
+          ) : (
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{background: familiasParaAtualizar.length ? "#ce2b37" : "#00924a", color: "white"}}>
+              {familiasParaAtualizar.length} {familiasParaAtualizar.length === 1 ? "pendente" : "pendentes"}
+            </span>
+          )}
         </div>
         <p className="text-xs text-[#8b6b7d] mb-4">Processos ativos sem atualização há 15 dias ou mais. Clique na bolinha ao concluir a atualização — ela reaparece em 15 dias.</p>
         <div className="border-t-2 border-[#592343] pt-4">
-          {familiasParaAtualizar.length === 0 ? (
+          {ehFimDeSemana ? (
+            <div className="text-center py-6">
+              <p className="text-4xl mb-2">☕</p>
+              <p className="text-sm text-[#8b6b7d]">Fim de semana. Descansa — as tarefas voltam segunda.</p>
+            </div>
+          ) : familiasParaAtualizar.length === 0 ? (
             <div className="text-center py-6">
               <p className="text-4xl mb-2">✅</p>
               <p className="text-sm text-[#8b6b7d]">Todas as famílias em dia. Bom trabalho!</p>
