@@ -432,7 +432,7 @@ function Sidebar({aba, setAba, ultima, carregar, usuario, setUsuario}) {
 }
 
 /* ── HOME ── */
-function TelaInicio({eventos, vendas, processos}) {
+function TelaInicio({eventos, vendas, processos, usuario, setAba}) {
   const agora = new Date();
   const [tarefas, setTarefas] = useState([
     {titulo:"Conferir compromissos do dia",feito:true},
@@ -442,6 +442,59 @@ function TelaInicio({eventos, vendas, processos}) {
     {titulo:"Verificar próximos prazos",feito:false},
   ]);
   const toggleTarefa = i => setTarefas(t=>t.map((x,j)=>j===i?{...x,feito:!x.feito}:x));
+
+  // Famílias que precisam ser revisadas (>= 15 dias sem update)
+  const [atualizadasMap, setAtualizadasMap] = useState({});
+  useEffect(() => {
+    const local = loadAtualizadasMap();
+    setAtualizadasMap(local);
+    fetchServerAtualizadas().then(server => {
+      if (!server) return;
+      const merged = mergeAtualizadasMaps(local, server);
+      setAtualizadasMap(merged);
+      saveAtualizadasMap(merged);
+    });
+    const onFocus = () => {
+      fetchServerAtualizadas().then(server => {
+        if (!server) return;
+        setAtualizadasMap(prev => {
+          const merged = mergeAtualizadasMaps(prev, server);
+          saveAtualizadasMap(merged);
+          return merged;
+        });
+      });
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
+
+  function toggleAtualizadoInicio(p) {
+    const eraHoje = marcadoHoje(atualizadasMap, p.pasta);
+    const novoMap = { ...atualizadasMap };
+    if (eraHoje) delete novoMap[p.pasta];
+    else novoMap[p.pasta] = { iso: new Date().toISOString(), usuario: usuario || "" };
+    setAtualizadasMap(novoMap);
+    saveAtualizadasMap(novoMap);
+    if (eraHoje) removeServerAtualizada(p.pasta);
+    else pushServerAtualizada(p.pasta, novoMap[p.pasta].iso, novoMap[p.pasta].usuario);
+  }
+
+  const familiasParaAtualizar = useMemo(() => {
+    return processos
+      .filter(p => !ehFinalizado(p.etapa))
+      .filter(p => !foiAtualizadoRecentemente(atualizadasMap, p.pasta))
+      .map(p => {
+        const localDias = diasDesdeMarcacao(atualizadasMap, p.pasta);
+        const sheetDias = diasSemUpdate(p.ultimaAtt);
+        const dias = localDias !== null ? localDias : sheetDias;
+        return { ...p, dias };
+      })
+      .sort((a, b) => {
+        if (a.dias === null && b.dias !== null) return -1;
+        if (b.dias === null && a.dias !== null) return 1;
+        return (b.dias || 0) - (a.dias || 0);
+      });
+  }, [processos, atualizadasMap]);
 
   const eventosHoje = eventos.filter(e=>e.dia===agora.getDate()&&e.mes===agora.getMonth()&&e.ano===agora.getFullYear());
   const proximos = useMemo(()=>eventos.filter(e=>{const d=Math.ceil((e.dateObj-new Date())/86400000);return d>=0&&d<=7;}).sort((a,b)=>a.dateObj-b.dateObj).slice(0,6),[eventos]);
@@ -507,6 +560,59 @@ function TelaInicio({eventos, vendas, processos}) {
               </button>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* Painel: Famílias para atualizar (>=15 dias sem update) */}
+      <div className="bg-white rounded-xl shadow p-6">
+        <div className="flex justify-between items-center mb-1">
+          <h3 className="text-xl font-bold text-[#592343]">Famílias para atualizar</h3>
+          <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{background: familiasParaAtualizar.length ? "#ce2b37" : "#00924a", color: "white"}}>
+            {familiasParaAtualizar.length} {familiasParaAtualizar.length === 1 ? "pendente" : "pendentes"}
+          </span>
+        </div>
+        <p className="text-xs text-[#8b6b7d] mb-4">Processos ativos sem atualização há 15 dias ou mais. Clique na bolinha ao concluir a atualização — ela reaparece em 15 dias.</p>
+        <div className="border-t-2 border-[#592343] pt-4">
+          {familiasParaAtualizar.length === 0 ? (
+            <div className="text-center py-6">
+              <p className="text-4xl mb-2">✅</p>
+              <p className="text-sm text-[#8b6b7d]">Todas as famílias em dia. Bom trabalho!</p>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-2">
+                {familiasParaAtualizar.slice(0, 8).map(p => {
+                  const dias = p.dias;
+                  const cor = dias === null ? "#8b6b7d" : dias >= 30 ? "#ce2b37" : "#d97706";
+                  const label = dias === null ? "nunca" : `${dias}d`;
+                  return (
+                    <div key={p.pasta} className="flex items-center gap-3 rounded-lg border border-[#e8ddd4] p-3 hover:bg-[#faf8f6] transition-colors">
+                      <button
+                        onClick={() => toggleAtualizadoInicio(p)}
+                        title="Marcar como atualizada hoje"
+                        className="h-5 w-5 rounded-full border-2 border-[#592343] flex-shrink-0 hover:bg-[#faf8f6] transition-colors"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-[#2a2a2a] truncate">{p.familia}</p>
+                        <p className="text-xs text-[#8b6b7d]">Pasta {p.pasta} · {p.vendedor || "sem vendedor"} · {p.etapa || "sem etapa"}</p>
+                      </div>
+                      <span className="text-xs font-bold text-white px-2 py-1 rounded-full flex-shrink-0" style={{background: cor}}>
+                        {label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              {familiasParaAtualizar.length > 8 && (
+                <button
+                  onClick={() => setAba && setAba("processos")}
+                  className="mt-3 w-full text-center text-sm text-[#592343] font-semibold hover:underline"
+                >
+                  Ver todas as {familiasParaAtualizar.length} pendentes na aba Processos →
+                </button>
+              )}
+            </>
+          )}
         </div>
       </div>
 
@@ -2074,7 +2180,7 @@ export default function App() {
             <h1 style={{fontFamily:"Georgia,'Times New Roman',serif",fontSize:28,fontWeight:700,color:"#592343",margin:0}}>{titulos[aba]}</h1>
             <p style={{fontSize:13,color:"#8b6b7d",margin:"4px 0 0"}}>Velloso Cidadania · 2026</p>
           </div>
-          {aba==="inicio"     && <TelaInicio eventos={eventos} vendas={vendas} processos={processos}/>}
+          {aba==="inicio"     && <TelaInicio eventos={eventos} vendas={vendas} processos={processos} usuario={usuario} setAba={setAba}/>}
           {aba==="calendario" && <TelaCalendario eventos={eventos}/>}
           {aba==="vendas"     && <TelaVendas vendas={vendas}/>}
           {aba==="processos"  && <TelaProcessos processos={processos} usuario={usuario}/>}
