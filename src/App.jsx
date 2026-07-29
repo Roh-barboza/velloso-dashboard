@@ -951,6 +951,54 @@ function saveAtualizadasMap(map) {
   } catch {}
 }
 
+/* ── Sync com servidor (Vercel Function + Upstash Redis) ── */
+// Endpoint que persiste o mapa de atualizacoes para sincronizar entre dispositivos.
+// Se o endpoint estiver fora do ar, o app continua funcionando 100% com localStorage.
+const API_ATUALIZADAS = "/api/atualizadas";
+
+async function fetchServerAtualizadas() {
+  try {
+    const r = await fetch(API_ATUALIZADAS);
+    if (!r.ok) return null;
+    const j = await r.json();
+    return j && j.map ? j.map : null;
+  } catch { return null; }
+}
+
+async function pushServerAtualizada(pasta, iso, usuario) {
+  try {
+    await fetch(API_ATUALIZADAS, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pasta, iso, usuario: usuario || "" }),
+    });
+  } catch {}
+}
+
+async function removeServerAtualizada(pasta) {
+  try {
+    await fetch(API_ATUALIZADAS, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pasta }),
+    });
+  } catch {}
+}
+
+// Mescla mapas local + servidor, o mais recente vence por pasta
+function mergeAtualizadasMaps(local, server) {
+  const out = { ...local };
+  for (const [k, v] of Object.entries(server || {})) {
+    const localIso = getIso(local[k]);
+    const serverIso = getIso(v);
+    if (!localIso) { out[k] = v; continue; }
+    if (serverIso && new Date(serverIso).getTime() >= new Date(localIso).getTime()) {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
 // Helpers para extrair iso do entry (compat)
 function getIso(entry) {
   if (!entry) return null;
@@ -1659,7 +1707,30 @@ function TelaProcessos({processos, usuario = ""}) {
   const [atualizadasMap, setAtualizadasMap] = useState({}); // { pasta: { iso, usuario } }
   const [etapasLocal, setEtapasLocal] = useState({}); // { pasta: "nova etapa" }
 
-  useEffect(() => { setAtualizadasMap(loadAtualizadasMap()); }, []);
+  useEffect(() => {
+    const local = loadAtualizadasMap();
+    setAtualizadasMap(local);
+    // busca do servidor e mescla (mais recente vence)
+    fetchServerAtualizadas().then(server => {
+      if (!server) return;
+      const merged = mergeAtualizadasMaps(local, server);
+      setAtualizadasMap(merged);
+      saveAtualizadasMap(merged);
+    });
+    // rebusca ao voltar pra aba (pega updates de outros dispositivos)
+    const onFocus = () => {
+      fetchServerAtualizadas().then(server => {
+        if (!server) return;
+        setAtualizadasMap(prev => {
+          const merged = mergeAtualizadasMaps(prev, server);
+          saveAtualizadasMap(merged);
+          return merged;
+        });
+      });
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
 
   // Lista de etapas únicas (extraídas da planilha + padrão)
   const etapasUnicas = useMemo(() => {
@@ -1702,13 +1773,23 @@ function TelaProcessos({processos, usuario = ""}) {
     }
     setAtualizadasMap(novoMap);
     saveAtualizadasMap(novoMap);
-    if (!eraHoje) chamarWebhookAtualizacao(p.pasta, p.familia, usuario);
+    // sync com servidor
+    if (eraHoje) {
+      removeServerAtualizada(p.pasta);
+    } else {
+      const entry = novoMap[p.pasta];
+      pushServerAtualizada(p.pasta, entry.iso, entry.usuario);
+    }
   }
 
-  // Muda a etapa do processo
+  // Muda a etapa do processo (grava local e envia pra planilha via /api/etapa)
   function mudarEtapa(p, novaEtapa) {
     setEtapasLocal(prev => ({ ...prev, [p.pasta]: novaEtapa }));
-    chamarWebhookEtapa(p.pasta, p.familia, novaEtapa, usuario);
+    fetch("/api/etapa", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pasta: p.pasta, novaEtapa, usuario }),
+    }).catch(() => {});
   }
 
   function getEtapa(p) {
