@@ -901,8 +901,9 @@ function TelaVendas({vendas}) {
 }
 
 /* ── ATUALIZAÇÕES DE PROCESSOS (Painel Inteligente) ── */
-// Configure aqui a URL do webhook do n8n para sincronizar com a planilha
-const WEBHOOK_PROCESSO_UPDATE = "https://chaoticcow-n8n.cloudfy.live/webhook/atualizar-processo";
+// Webhook desativado — persistência agora é 100% localStorage no navegador de cada usuario.
+// Para reativar sincronização entre dispositivos, coloque aqui a URL de um endpoint (n8n, Vercel Function, etc.)
+const WEBHOOK_PROCESSO_UPDATE = "";
 
 const DIAS_LIMITE_URGENCIA = 15; // a partir de X dias sem update, vira "para atualizar"
 
