@@ -9,7 +9,7 @@
 // -------------------------------------------------------------------
 
 // >>> AJUSTE AQUI se o nome da aba de processos for outro <<<
-const SHEET_NAME = "Processos";
+const SHEET_NAME = "CONTROLE DE PROCESSOS";
 
 // -------------------------------------------------------------------
 
