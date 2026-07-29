@@ -25,9 +25,17 @@ export default async function handler(req, res) {
   try {
     if (req.method === "GET") {
       if (!APPS_SCRIPT_URL) return res.status(200).json({ map: {} });
-      const r = await fetch(APPS_SCRIPT_URL + "?acao=listar", { redirect: "follow" });
-      const j = await r.json().catch(() => ({ map: {} }));
-      return res.status(200).json({ map: j.map || {} });
+      try {
+        const r = await fetch(APPS_SCRIPT_URL + "?acao=listar", { redirect: "follow" });
+        const text = await r.text();
+        let j = {};
+        try { j = JSON.parse(text); } catch (_) {
+          return res.status(502).json({ error: "resposta nao-JSON do Apps Script", status: r.status, sample: text.slice(0, 300) });
+        }
+        return res.status(200).json({ map: j.map || {} });
+      } catch (fe) {
+        return res.status(502).json({ error: "fetch falhou", detail: String(fe?.cause?.message || fe?.message || fe) });
+      }
     }
 
     if (req.method === "POST") {
