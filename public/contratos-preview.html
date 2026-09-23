@@ -1,177 +1,82 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Formulário de Contratos | Velloso Cidadania</title>
-<meta name="description" content="Preencha seus dados para elaboração do contrato com a nossa equipe.">
-<meta property="og:type" content="website">
-<meta property="og:title" content="Formulário de Contratos | Velloso Cidadania">
-<meta property="og:description" content="Preencha seus dados para elaboração do contrato com a nossa equipe.">
-<meta property="og:image" content="https://velloso-dashboard-git-preview-contra-a1c304-barbozaa-s-projects.vercel.app/api/og-contracts">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
-<meta property="og:url" content="https://velloso-dashboard-git-preview-contra-a1c304-barbozaa-s-projects.vercel.app/contratos-preview.html">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="theme-color" content="#6d0f27">
-<style>
-:root{
-  --wine:#6d0f27; --wine2:#8a2038; --green:#0c4b3b; --gold:#9b7844;
-  --cream:#f6f0e7; --cream2:#ece1d1; --ink:#151817; --muted:#5d5d59;
-}
-*{box-sizing:border-box}
-html,body{margin:0;min-height:100%;background:#f1ece4;color:var(--ink);font-family:Inter,Arial,sans-serif}
-body{background:
- radial-gradient(circle at 17% 10%,rgba(255,255,255,.95),transparent 30%),
- linear-gradient(120deg,#eee7dc 0%,#f7f3ec 47%,#e9e1d5 100%)}
-.stage{max-width:1536px;margin:0 auto;min-height:100vh;padding:16px 34px 34px;display:grid;grid-template-columns:560px 86px minmax(650px,1fr);gap:20px;align-items:center}
-.phone{
- width:550px;height:930px;background:#0a1512;border:9px solid #202322;border-radius:62px;
- box-shadow:0 22px 48px rgba(0,0,0,.28);overflow:hidden;position:relative
-}
-.notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:220px;height:35px;background:#111;border-radius:0 0 24px 24px;z-index:3}
-.status{height:65px;padding:22px 30px 0;color:#fff;font-weight:700;font-size:21px;display:flex;justify-content:space-between;position:relative;z-index:2}
-.chathead{height:95px;background:#0b3b31;color:#fff;display:flex;align-items:center;padding:12px 18px;gap:12px}
-.back{font-size:33px;line-height:1}
-.avatar{width:49px;height:49px;border-radius:50%;background:#fbf7ef;display:grid;place-items:center;flex:none}
-.avatar svg{width:38px;height:38px}
-.chatname{font-size:20px;font-weight:700}.online{font-size:13px;opacity:.78;margin-top:2px}
-.headicons{margin-left:auto;display:flex;gap:20px;font-size:25px;opacity:.96}
-.chatbody{height:770px;padding:18px 18px 18px;background:
- radial-gradient(circle at 30% 10%,rgba(21,76,62,.7),transparent 42%),
- #071914;position:relative}
-.bubble{max-width:420px;background:#19352e;color:#fff;padding:14px 16px;border-radius:16px 16px 16px 4px;font-size:18px;line-height:1.5;box-shadow:0 7px 18px rgba(0,0,0,.22)}
-.linkcard{margin-top:12px;background:#112d27;border-radius:15px;overflow:hidden;box-shadow:0 12px 30px rgba(0,0,0,.36)}
-.linkimage{height:300px;background:linear-gradient(135deg,#f7f2ea,#e8ddcd);position:relative;overflow:hidden;padding:28px 24px}
-.brandlock{display:flex;align-items:center;gap:12px;position:relative;z-index:2}
-.brandlock svg{width:64px;height:64px;flex:none}
-.wordmark{color:var(--wine);font-family:Georgia,serif;font-weight:700;font-size:35px;letter-spacing:.05em;line-height:.9}
-.wordmark span{display:block;font-family:Arial,sans-serif;font-size:10px;letter-spacing:.5em;margin-top:12px;margin-left:4px}
-.cardtitle{position:relative;z-index:2;font-family:Georgia,serif;font-weight:700;font-size:23px;margin-top:18px;max-width:315px}
-.cardsub{position:relative;z-index:2;font-size:15px;line-height:1.35;margin-top:6px;max-width:310px}
-.doc{position:absolute;right:-18px;bottom:-22px;width:235px;height:180px;background:#fffaf1;border:1px solid #cfbea4;transform:rotate(-8deg);box-shadow:0 15px 28px rgba(57,42,27,.2);padding:27px}
-.doc b{font:25px Georgia,serif;letter-spacing:.1em;color:#4c3f30}.doc i{display:block;height:2px;background:#c8b79e;margin-top:20px;box-shadow:0 14px 0 #ddd0bc,0 28px 0 #ddd0bc,0 42px 0 #ddd0bc}
-.pen{position:absolute;width:230px;height:19px;background:#171714;border-radius:11px;right:-8px;bottom:35px;transform:rotate(-18deg);box-shadow:0 7px 14px rgba(0,0,0,.24)}
-.pen:before{content:"";position:absolute;width:45px;height:19px;background:#b28c52;left:10px;border-radius:8px}
-.miniicons{position:absolute;left:24px;bottom:18px;display:flex;gap:30px;z-index:3}
-.mi{text-align:center;font-size:11px;color:#3c3b36}.mi .round{width:34px;height:34px;border:1.5px solid #9b7844;border-radius:50%;display:grid;place-items:center;margin:0 auto 5px;color:#9b7844;font-size:16px}
-.cardmeta{padding:15px 16px 16px;color:#fff}.cardmeta strong{font-size:17px;display:block}.cardmeta p{font-size:14px;line-height:1.45;margin:7px 0;color:#e7e9e8}.cardmeta small{color:#9ba7a4;font-size:13px}
-.inputbar{position:absolute;left:18px;right:18px;bottom:17px;height:53px;border-radius:26px;background:#17322c;color:#a8b2af;display:flex;align-items:center;padding:0 17px;font-size:16px}.inputbar .plus{font-size:30px;margin-right:14px}.mic{margin-left:auto;width:45px;height:45px;border-radius:50%;background:#09b77d;color:white;display:grid;place-items:center;font-size:21px}
-
-.flow{height:820px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#8c6d3f}
-.flow .arrow{font-family:Georgia,serif;font-size:70px;font-weight:300}.flow .label{writing-mode:horizontal-tb;text-align:center;font-size:15px;letter-spacing:.18em;color:#171817;line-height:1.7;margin-top:12px}
-
-.browser{height:858px;border-radius:25px;overflow:hidden;background:#f5efe6;box-shadow:0 22px 48px rgba(61,49,32,.18);position:relative;border:1px solid rgba(153,116,64,.15)}
-.browserbar{height:64px;background:rgba(255,255,255,.76);display:flex;align-items:center;padding:0 24px;gap:10px;border-bottom:1px solid rgba(0,0,0,.05)}
-.dot{width:13px;height:13px;border-radius:50%}.red{background:#f2534c}.yellow{background:#f4b521}.green{background:#20b05b}
-.address{margin-left:22px;flex:1;max-width:610px;height:38px;border-radius:20px;background:#fff;display:flex;align-items:center;padding:0 20px;color:#262626;font-size:16px;box-shadow:0 2px 7px rgba(0,0,0,.04)}
-.page{height:calc(100% - 64px);position:relative;overflow:hidden;background:
- radial-gradient(circle at 50% 20%,rgba(255,255,255,.8),transparent 28%),
- linear-gradient(145deg,#faf7f1,#eee4d7)}
-.flagfold{position:absolute;right:-20px;top:-30px;width:180px;height:340px;background:linear-gradient(90deg,#1d744e 0 33%,#f3eee4 33% 66%,#a72c32 66%);transform:rotate(13deg);border-radius:0 0 0 35px;filter:drop-shadow(0 12px 18px rgba(0,0,0,.12))}
-.colosseo{position:absolute;right:-60px;bottom:-28px;width:390px;height:280px;border-radius:55% 45% 0 0/40% 40% 0 0;border:2px solid rgba(126,96,57,.22);opacity:.38}
-.colosseo:before,.colosseo:after{content:"";position:absolute;left:28px;right:28px;border-top:2px solid rgba(126,96,57,.22)}.colosseo:before{top:75px}.colosseo:after{top:145px}
-.arches{position:absolute;left:22px;right:20px;bottom:20px;height:80px;background:repeating-linear-gradient(90deg,transparent 0 28px,rgba(126,96,57,.13) 29px 33px)}
-.pageinner{position:relative;z-index:2;height:100%;padding:36px 56px 32px;display:flex;flex-direction:column;align-items:center}
-.logo-big{display:flex;flex-direction:column;align-items:center;margin-top:8px}.logo-big svg{width:74px;height:74px}.logo-big b{font-family:Georgia,serif;font-size:44px;letter-spacing:.06em;color:var(--wine);line-height:1}.logo-big span{font-size:11px;letter-spacing:.65em;color:var(--wine);margin-top:10px;margin-left:8px}
-.sidewords{position:absolute;right:82px;top:66px;font-size:11px;letter-spacing:.31em;line-height:2.15;color:#8a6d46;text-transform:uppercase}
-.page h1{font-family:Georgia,serif;font-weight:600;font-size:38px;line-height:1.1;text-align:center;margin:68px 0 12px;max-width:650px}
-.tricolor{width:102px;height:3px;background:linear-gradient(90deg,#1a7c50 0 33%,#eee7dc 33% 66%,#c23434 66%);margin:9px auto 18px}
-.page p{text-align:center;font:17px/1.5 Arial,sans-serif;color:#2d302e;margin:0}
-.cta{margin-top:30px;display:inline-flex;align-items:center;justify-content:center;min-width:375px;height:62px;border-radius:12px;background:#0c4b3b;color:#fff;text-decoration:none;letter-spacing:.2em;font-size:13px;box-shadow:0 10px 22px rgba(12,75,59,.2)}
-.features{width:590px;display:grid;grid-template-columns:repeat(3,1fr);gap:15px;margin-top:43px}.feat{text-align:center;font-size:14px;line-height:1.25}.feat .ico{width:43px;height:43px;margin:0 auto 10px;border:1.5px solid var(--gold);border-radius:50%;display:grid;place-items:center;color:var(--gold);font-size:20px}
-.footerbrand{position:absolute;left:56px;bottom:45px;font-family:Georgia,serif;color:#8c7759}.footerbrand strong{font-size:11px;letter-spacing:.28em}.footerbrand div{margin-top:8px;font-size:13px;letter-spacing:.12em;line-height:1.55;color:#a18c70}
-.redirectnote{margin-top:14px;font-size:11px;color:#8c8a84;text-align:center}
-.cap{position:absolute;left:0;right:0;bottom:-40px;text-align:center;font-size:14px;letter-spacing:.17em;color:#1b1c1b}
-.preview-pill{position:fixed;right:18px;bottom:18px;background:#6d0f27;color:#fff;padding:9px 14px;border-radius:999px;font-size:12px;letter-spacing:.08em;box-shadow:0 8px 20px rgba(109,15,39,.2)}
-
-@media(max-width:1200px){
- .stage{grid-template-columns:1fr;justify-items:center;padding:22px}.flow{display:none}.phone{transform:scale(.9);transform-origin:top center;margin-bottom:-80px}.browser{width:min(92vw,760px)}.cap{display:none}
-}
-@media(max-width:650px){
- .phone{width:94vw;height:820px;border-radius:45px;transform:none;margin-bottom:15px}.chatbody{height:660px}.linkimage{height:255px}.browser{width:94vw;height:760px}.pageinner{padding:28px 20px}.features{width:100%;gap:5px}.cta{min-width:85%}.page h1{font-size:31px}.sidewords{display:none}
-}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Formulário de Contratos | Velloso Cidadania</title>
+  <meta name="description" content="Preencha seus dados para elaboração do contrato com a nossa equipe.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Formulário de Contratos | Velloso Cidadania">
+  <meta property="og:description" content="Preencha seus dados para elaboração do contrato com a nossa equipe.">
+  <meta property="og:image" content="https://velloso-dashboard-git-preview-contra-a1c304-barbozaa-s-projects.vercel.app/api/og-contracts">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="472">
+  <meta property="og:image:height" content="296">
+  <meta property="og:url" content="https://velloso-dashboard-git-preview-contra-a1c304-barbozaa-s-projects.vercel.app/contratos-preview.html">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="theme-color" content="#f3eee6">
+  <style>
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%;background:#eee8df}
+    body{
+      min-height:100vh;
+      display:grid;
+      place-items:center;
+      padding:18px;
+      font-family:Arial,sans-serif;
+    }
+    .page{
+      position:relative;
+      width:min(100%,568px);
+      aspect-ratio:568/638;
+      overflow:hidden;
+      border-radius:2px;
+      box-shadow:0 20px 55px rgba(50,35,20,.14);
+      background:#f7f1e7;
+    }
+    .page img{
+      position:absolute;
+      inset:0;
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      display:block;
+      user-select:none;
+      -webkit-user-drag:none;
+    }
+    .cta{
+      position:absolute;
+      left:23.4%;
+      top:51.7%;
+      width:53.7%;
+      height:7.8%;
+      z-index:3;
+      border-radius:12px;
+      cursor:pointer;
+      text-indent:-9999px;
+      overflow:hidden;
+      background:transparent;
+    }
+    .cta:focus-visible{
+      outline:3px solid rgba(109,15,39,.55);
+      outline-offset:3px;
+    }
+    @media(max-width:620px){
+      body{padding:0;background:#f7f1e7}
+      .page{width:100vw;border-radius:0;box-shadow:none}
+    }
+  </style>
 </head>
 <body>
-<div class="stage">
-  <section style="position:relative">
-    <div class="phone">
-      <div class="notch"></div>
-      <div class="status"><span>14:27</span><span>▮▮ Wi‑Fi ▰</span></div>
-      <div class="chathead">
-        <div class="back">‹</div>
-        <div class="avatar">
-          <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="none" stroke="#6d0f27" stroke-width="3"/><path d="M23 42 C31 33 37 39 43 34 C47 30 43 24 51 22 C59 20 64 28 61 34 C58 41 66 43 72 47 C79 52 72 59 66 60 C58 61 59 72 52 76 C46 80 42 72 37 69 C30 65 24 70 20 62" fill="none" stroke="#6d0f27" stroke-width="3" stroke-linecap="round"/></svg>
-        </div>
-        <div><div class="chatname">Velloso Cidadania</div><div class="online">online</div></div>
-        <div class="headicons"><span>◻</span><span>⌕</span><span>⋮</span></div>
-      </div>
-      <div class="chatbody">
-        <div class="bubble">Olá! 👋<br>Para darmos continuidade ao seu atendimento, pedimos que preencha o nosso formulário de contratos.<br>É rápido, seguro e nos ajuda a preparar tudo com mais agilidade.</div>
-        <div class="linkcard">
-          <div class="linkimage">
-            <div class="brandlock">
-              <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="none" stroke="#6d0f27" stroke-width="3"/><path d="M23 42 C31 33 37 39 43 34 C47 30 43 24 51 22 C59 20 64 28 61 34 C58 41 66 43 72 47 C79 52 72 59 66 60 C58 61 59 72 52 76 C46 80 42 72 37 69 C30 65 24 70 20 62" fill="none" stroke="#6d0f27" stroke-width="3" stroke-linecap="round"/></svg>
-              <div class="wordmark">VELLOSO<span>CIDADANIA</span></div>
-            </div>
-            <div class="cardtitle">Formulário de Contratos</div>
-            <div class="cardsub">Preencha seus dados para elaboração do contrato com a nossa equipe.</div>
-            <div class="doc"><b>CONTRATO</b><i></i></div><div class="pen"></div>
-            <div class="miniicons">
-              <div class="mi"><div class="round">✓</div>Segurança</div>
-              <div class="mi"><div class="round">◷</div>Agilidade</div>
-              <div class="mi"><div class="round">♧</div>Atendimento<br>especializado</div>
-            </div>
-          </div>
-          <div class="cardmeta">
-            <strong>Formulário de Contratos | Velloso Cidadania</strong>
-            <p>Preencha seus dados para elaboração do contrato com a nossa equipe.</p>
-            <small>contratos-vellosocidadania.vercel.app</small>
-          </div>
-        </div>
-        <div class="inputbar"><span class="plus">＋</span>Mensagem <span class="mic">●</span></div>
-      </div>
-    </div>
-    <div class="cap">COMO APARECE NO WHATSAPP</div>
-  </section>
-
-  <div class="flow"><div class="arrow">→</div><div class="label">AO CLICAR<br>NO LINK</div></div>
-
-  <section style="position:relative;width:100%">
-    <div class="browser">
-      <div class="browserbar"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span><div class="address">🔒&nbsp;&nbsp; contratos-vellosocidadania.vercel.app</div></div>
-      <div class="page">
-        <div class="flagfold"></div><div class="colosseo"><div class="arches"></div></div>
-        <div class="pageinner">
-          <div class="logo-big">
-            <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="none" stroke="#6d0f27" stroke-width="3"/><path d="M23 42 C31 33 37 39 43 34 C47 30 43 24 51 22 C59 20 64 28 61 34 C58 41 66 43 72 47 C79 52 72 59 66 60 C58 61 59 72 52 76 C46 80 42 72 37 69 C30 65 24 70 20 62" fill="none" stroke="#6d0f27" stroke-width="3" stroke-linecap="round"/></svg>
-            <b>VELLOSO</b><span>CIDADANIA</span>
-          </div>
-          <div class="sidewords">TRADIÇÃO<br>PLANEJAMENTO<br>RESULTADOS</div>
-          <h1>Redirecionando você para o<br>Formulário de Contratos</h1>
-          <div class="tricolor"></div>
-          <p>Você será direcionado automaticamente em alguns segundos.<br>Se não for redirecionado, clique no botão abaixo.</p>
-          <a class="cta" href="https://forms.gle/XYKmKUTtBC9mhWev7" id="formLink">IR PARA O FORMULÁRIO&nbsp;&nbsp; →</a>
-          <div class="features">
-            <div class="feat"><div class="ico">✓</div>Segurança<br>dos seus dados</div>
-            <div class="feat"><div class="ico">◷</div>Agilidade<br>no atendimento</div>
-            <div class="feat"><div class="ico">♧</div>Suporte<br>especializado</div>
-          </div>
-          <div class="footerbrand"><strong>VELLOSO CIDADANIA</strong><div>Mais que processos.<br>Histórias que atravessam gerações.</div></div>
-          <div class="redirectnote">Nesta prévia o redirecionamento automático fica pausado para você conseguir avaliar o layout.</div>
-        </div>
-      </div>
-    </div>
-    <div class="cap">O QUE O CLIENTE VÊ AO ABRIR O LINK</div>
-  </section>
-</div>
-<div class="preview-pill">PRÉVIA • PRODUÇÃO INALTERADA</div>
-<script>
-const params = new URLSearchParams(location.search);
-if (!params.has('preview')) {
-  setTimeout(() => { location.href = 'https://forms.gle/XYKmKUTtBC9mhWev7'; }, 3500);
-}
-</script>
+  <main class="page" aria-label="Velloso Cidadania - Formulário de Contratos">
+    <img src="/api/contracts-page" alt="Redirecionando você para o Formulário de Contratos da Velloso Cidadania">
+    <a class="cta" href="https://forms.gle/XYKmKUTtBC9mhWev7" aria-label="Ir para o formulário de contratos">Ir para o formulário</a>
+  </main>
+  <script>
+    const p=new URLSearchParams(location.search);
+    if(!p.has('preview')){
+      setTimeout(()=>location.replace('https://forms.gle/XYKmKUTtBC9mhWev7'),3500);
+    }
+  </script>
 </body>
 </html>
