@@ -1,25 +1,38 @@
 # Página de contratos — Velloso Cidadania
 
-Página estática independente do dashboard. Não usa Node, build, variáveis de ambiente, funções ou serviços externos para carregar a página e a prévia.
+Página pública, estática e independente do dashboard principal. Não usa framework, build, variáveis de ambiente, funções serverless nem hospedagem externa para os assets essenciais.
 
 ## Publicação no Vercel
 
-1. Importe `Roh-barboza/velloso-dashboard` como **um novo projeto** (não altere o projeto `velloso-dashboard`).
-2. Selecione a branch `preview-contratos-link` até que esta pasta esteja na branch que você pretende usar para o deploy de produção.
-3. **Project Name:** `contratos-vellosocidadania`.
-4. **Root Directory:** `contracts-redirect`.
-5. **Framework Preset:** `Other`. Deixe Build Command vazio e configure **Output Directory** como `public` se o Vercel não o detectar automaticamente; o `index.html` e todos os assets ficam em `public/`.
-6. Desative Deployment Protection/Authentication do novo projeto para que o WhatsApp consiga buscar a página e a imagem pública. Mantenha o dashboard no projeto atual.
-7. Faça o deploy e valide `https://contratos-vellosocidadania.vercel.app/` e `https://contratos-vellosocidadania.vercel.app/og-contracts.jpg` sem estar logado.
+Crie um novo projeto no Vercel. Não altere o projeto que publica o dashboard principal.
 
-O HTML inicial já contém título, descrição e imagem Open Graph absolutos. O navegador aguarda 3,5 segundos e usa `window.location.replace` para o Google Forms; o link do botão funciona imediatamente. O crawler não executa o redirecionamento por JavaScript.
+| Configuração | Valor |
+| --- | --- |
+| Repositório | `Roh-barboza/velloso-dashboard` |
+| Project Name | `contratos-vellosocidadania` |
+| Root Directory | `contracts-redirect` |
+| Framework Preset | `Other` |
+| Build Command | vazio |
+| Output Directory | `public` |
+
+Use a branch que contém esta pasta. Enquanto o trabalho estiver apenas na branch de prévia, selecione `preview-contratos-link`.
+
+Desative qualquer Deployment Protection/Authentication no novo projeto. Isso é indispensável para que os robôs do WhatsApp acessem o HTML e `og-contracts.jpg` sem login.
+
+Após o deploy, valide em uma janela anônima:
+
+- `https://contratos-vellosocidadania.vercel.app/`
+- `https://contratos-vellosocidadania.vercel.app/og-contracts.jpg`
+- `https://contratos-vellosocidadania.vercel.app/logo-velloso.jpg`
+
+O HTML inicial contém todos os metadados Open Graph e Twitter/X. O redirecionamento para o Google Forms acontece no navegador após 3,5 segundos com `window.location.replace`; o botão funciona imediatamente. Não há redirecionamento HTTP na rota principal.
 
 ## Arquivos
 
-- `public/index.html`: estrutura e metadados sociais.
-- `public/styles.css`: layout desktop e mobile.
+- `public/index.html`: conteúdo da página e metadados sociais.
+- `public/styles.css`: composição visual responsiva para desktop e celular.
 - `public/redirect.js`: redirecionamento temporizado.
-- `public/logo-velloso.jpg`: arquivo oficial do logo fornecido.
-- `public/og-contracts.jpg`: imagem estática 1200 × 630.
-- `public/roma-bg.webp`: ilustração decorativa da página.
-- `vercel.json`: cabeçalhos e configuração estática.
+- `public/logo-velloso.jpg`: logo oficial fornecido.
+- `public/og-contracts.jpg`: card social estático de 1200 × 630 px.
+- `public/roma-bg.webp`: bandeira italiana e Coliseu usados na página.
+- `vercel.json`: publicação estática, cabeçalhos e cache.
