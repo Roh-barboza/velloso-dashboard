@@ -1,8 +1,6 @@
 import { ImageResponse } from '@vercel/og';
 import { jsx, jsxs } from 'react/jsx-runtime';
 
-export const config = { runtime: 'edge' };
-
 const box=(style,children)=>jsx('div',{style,children});
 
 export default function handler() {
