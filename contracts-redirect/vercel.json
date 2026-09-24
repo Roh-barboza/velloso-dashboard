@@ -6,40 +6,61 @@
   "trailingSlash": false,
   "headers": [
     {
+      "source": "/index.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        }
+      ]
+    },
+    {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        }
       ]
     },
     {
       "source": "/og-contracts.jpg",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=3600, s-maxage=86400" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, s-maxage=86400"
+        }
       ]
     },
     {
       "source": "/logo-velloso.jpg",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=3600, s-maxage=86400" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, s-maxage=86400"
+        }
       ]
     },
     {
       "source": "/roma-bg.webp",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=3600, s-maxage=86400" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, s-maxage=86400"
+        }
       ]
     },
     {
       "source": "/styles.css",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=3600, s-maxage=86400" }
-      ]
-    },
-    {
-      "source": "/redirect.js",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=3600, s-maxage=86400" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, s-maxage=86400"
+        }
       ]
     }
   ]

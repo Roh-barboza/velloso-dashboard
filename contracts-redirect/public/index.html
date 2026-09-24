@@ -32,7 +32,13 @@
   <link rel="preload" href="/logo-velloso.jpg?v=official" as="image" type="image/jpeg">
   <link rel="preload" href="/roma-bg.webp" as="image" type="image/webp">
   <link rel="stylesheet" href="/styles.css">
-  <script defer src="/redirect.js"></script>
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      const FORM_URL = 'https://forms.gle/XYKmKUTtBC9mhWev7';
+      const REDIRECT_DELAY_MS = 25000;
+      window.setTimeout(() => window.location.replace(FORM_URL), REDIRECT_DELAY_MS);
+    });
+  </script>
 </head>
 <body>
   <main class="page" aria-labelledby="page-title">
@@ -55,7 +61,7 @@
       <h1 id="page-title">Redirecionando você para o<br> <span>Formulário de Contratos</span></h1>
       <div class="tricolore" aria-hidden="true"><i></i><i></i><i></i></div>
       <p class="instructions">
-        Você será direcionado automaticamente em alguns segundos.<br>
+        Você será direcionado automaticamente em 25 segundos.<br>
         Se não for redirecionado, clique no botão abaixo.
       </p>
       <a class="button" href="https://forms.gle/XYKmKUTtBC9mhWev7">
